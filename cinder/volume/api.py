@@ -98,7 +98,7 @@ def check_policy(context, action, target_obj=None):
 
     if isinstance(target_obj, objects_base.CinderObject):
         # Turn object into dict so target.update can work
-        target.update(objects_base.obj_to_primitive(target_obj) or {})
+        target.update(target_obj.obj_to_primitive() or {})
     else:
         target.update(target_obj or {})
 
@@ -854,7 +854,7 @@ class API(base.Base):
 
         snapshot_obj = self.get_snapshot(context, snapshot['id'])
         snapshot_obj.status = 'deleting'
-        snapshot_obj.save(context)
+        snapshot_obj.save()
 
         volume = self.db.volume_get(context, snapshot_obj.volume_id)
         self.volume_rpcapi.delete_snapshot(context, snapshot_obj,
@@ -865,7 +865,7 @@ class API(base.Base):
     @wrap_check_policy
     def update_snapshot(self, context, snapshot, fields):
         snapshot.update(fields)
-        snapshot.save(context)
+        snapshot.save()
 
     @wrap_check_policy
     def get_volume_metadata(self, context, volume):
@@ -994,7 +994,7 @@ class API(base.Base):
         self._check_metadata_properties(_metadata)
 
         snapshot.metadata = _metadata
-        snapshot.save(context)
+        snapshot.save()
 
         # TODO(jdg): Implement an RPC call for drivers that may use this info
 
