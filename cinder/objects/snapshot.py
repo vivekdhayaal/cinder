@@ -24,9 +24,6 @@ from cinder.objects import base
 from cinder import utils
 
 CONF = cfg.CONF
-# NOTE(thangp): OPTIONAL_FIELDS are fields that would be lazy-loaded. They are
-# typically the relationship in the sqlalchemy object.
-OPTIONAL_FIELDS = ['volume', 'metadata']
 LOG = logging.getLogger(__name__)
 
 
@@ -35,6 +32,10 @@ class Snapshot(base.CinderPersistentObject, base.CinderObject,
                base.CinderObjectDictCompat):
     # Version 1.0: Initial version
     VERSION = '1.0'
+
+    # NOTE(thangp): OPTIONAL_FIELDS are fields that would be lazy-loaded. They
+    # are typically the relationship in the sqlalchemy object.
+    OPTIONAL_FIELDS = ('volume', 'metadata', 'cgsnapshot')
 
     DEFAULT_EXPECTED_ATTR = ('metadata',)
 
@@ -106,7 +107,7 @@ class Snapshot(base.CinderPersistentObject, base.CinderObject,
         if expected_attrs is None:
             expected_attrs = []
         for name, field in snapshot.fields.items():
-            if name in OPTIONAL_FIELDS:
+            if name in Snapshot.OPTIONAL_FIELDS:
                 continue
             value = db_snapshot.get(name)
             if isinstance(field, fields.IntegerField):
@@ -164,7 +165,7 @@ class Snapshot(base.CinderPersistentObject, base.CinderObject,
         db.snapshot_destroy(self._context, self.id)
 
     def obj_load_attr(self, attrname):
-        if attrname not in OPTIONAL_FIELDS:
+        if attrname not in self.OPTIONAL_FIELDS:
             raise exception.ObjectActionError(
                 action='obj_load_attr',
                 reason=_('attribute %s not lazy-loadable') % attrname)

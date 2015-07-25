@@ -24,7 +24,6 @@ from cinder.objects import base
 from cinder import utils
 
 CONF = cfg.CONF
-OPTIONAL_FIELDS = []
 LOG = logging.getLogger(__name__)
 
 
@@ -33,6 +32,9 @@ class Volume(base.CinderPersistentObject, base.CinderObject,
              base.CinderObjectDictCompat):
     # Version 1.0: Initial version
     VERSION = '1.0'
+
+    OPTIONAL_FIELDS = ('metadata', 'admin_metadata',
+                       'volume_type', 'volume_attachment')
 
     DEFAULT_EXPECTED_ATTR = ('admin_metadata', 'metadata')
 
@@ -104,7 +106,9 @@ class Volume(base.CinderPersistentObject, base.CinderObject,
     @staticmethod
     def _from_db_object(context, volume, db_volume):
         for name, field in volume.fields.items():
-            value = db_volume[name]
+            if name in Volume.OPTIONAL_FIELDS:
+                continue
+            value = db_volume.get(name)
             if isinstance(field, fields.IntegerField):
                 value = value or 0
             volume[name] = value
@@ -132,7 +136,44 @@ class Volume(base.CinderPersistentObject, base.CinderObject,
 
     @base.remotable
     def destroy(self):
-        db.volume_destroy(self._context, self.id)
+        with self.obj_as_admin():
+            db.volume_destroy(self._context, self.id)
+
+    def obj_load_attr(self, attrname):
+        if attrname not in self.OPTIONAL_FIELDS:
+            raise exception.ObjectActionError(
+                action='obj_load_attr',
+                reason=_('attribute %s not lazy-loadable') % attrname)
+        if not self._context:
+            raise exception.OrphanedObjectError(method='obj_load_attr',
+                                                objtype=self.obj_name())
+
+        if attrname == 'metadata':
+            self.metadata = db.volume_metadata_get(self._context, self.id)
+        elif attrname == 'admin_metadata':
+            self.admin_metadata = {}
+            if self._context.is_admin:
+                self.admin_metadata = db.volume_admin_metadata_get(
+                    self._context, self.id)
+        elif attrname == 'volume_type':
+            self.volume_type = objects.VolumeType.get_by_id(
+                self._context, self.volume_type_id)
+        elif attrname == 'volume_attachment':
+            attachments = objects.VolumeAttachmentList.get_all_by_volume_id(
+                self._context, self.id)
+            self.volume_attachment = attachments
+
+        self.obj_reset_changes(fields=[attrname])
+
+    def delete_metadata_key(self, key):
+        db.volume_metadata_delete(self._context, self.id, key)
+        md_was_changed = 'metadata' in self.obj_what_changed()
+
+        del self.metadata[key]
+        self._orig_metadata.pop(key, None)
+
+        if not md_was_changed:
+            self.obj_reset_changes(['metadata'])
 
 
 @base.CinderObjectRegistry.register
