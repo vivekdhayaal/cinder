@@ -904,30 +904,21 @@ class API(base.Base):
         `metadata` argument will be deleted.
 
         """
-        if delete:
-            _metadata = metadata
-        else:
-            orig_meta = self.get_volume_metadata(context, volume)
-            _metadata = orig_meta.copy()
-            _metadata.update(metadata)
-
-        self._check_metadata_properties(_metadata)
-
+        if volume['status'] == 'maintenance':
+            LOG.info(_LI('Unable to update the metadata for volume, '
+                         'because it is in maintenance.'), resource=volume)
+            msg = _("The volume metadata cannot be updated when the volume "
+                    "is in maintenance mode.")
+            raise exception.InvalidVolume(reason=msg)
+        self._check_metadata_properties(metadata)
         db_meta = self.db.volume_metadata_update(context, volume['id'],
-                                                 _metadata, delete)
+                                                 metadata,
+                                                 delete,
+                                                 meta_type)
 
         # TODO(jdg): Implement an RPC call for drivers that may use this info
 
         return db_meta
-
-    def get_volume_metadata_value(self, volume, key):
-        """Get value of particular metadata key."""
-        metadata = volume.get('volume_metadata')
-        if metadata:
-            for i in volume['volume_metadata']:
-                if i['key'] == key:
-                    return i['value']
-        return None
 
     @wrap_check_policy
     def get_volume_admin_metadata(self, context, volume):
@@ -949,21 +940,15 @@ class API(base.Base):
         `metadata` argument will be deleted.
 
         """
-        if delete:
-            _metadata = metadata
-        else:
-            orig_meta = self.get_volume_admin_metadata(context, volume)
-            _metadata = orig_meta.copy()
-            _metadata.update(metadata)
-
-        self._check_metadata_properties(_metadata)
-
-        self.db.volume_admin_metadata_update(context, volume['id'],
-                                             _metadata, delete)
+        self._check_metadata_properties(metadata)
+        db_meta = self.db.volume_admin_metadata_update(context, volume['id'],
+                                                       metadata, delete)
 
         # TODO(jdg): Implement an RPC call for drivers that may use this info
 
-        return _metadata
+        LOG.info(_LI("Update volume admin metadata completed successfully."),
+                 resource=volume)
+        return db_meta
 
     def get_snapshot_metadata(self, context, snapshot):
         """Get all metadata associated with a snapshot."""
