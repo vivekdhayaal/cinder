@@ -809,6 +809,34 @@ def convert_version_to_str(version_int):
 
     return reduce(lambda x, y: "%s.%s" % (x, y), version_numbers)
 
+    :param hostname:  Host name to resolve.
+    :returns:         IP Address for Host name.
+    """
+    result = socket.getaddrinfo(hostname, None)[0]
+    (family, socktype, proto, canonname, sockaddr) = result
+    LOG.debug('Asked to resolve hostname %(host)s and got IP %(ip)s.',
+              {'host': hostname, 'ip': sockaddr[0]})
+    return sockaddr[0]
 
-def convert_version_to_tuple(version_str):
-    return tuple(int(part) for part in version_str.split('.'))
+
+def build_or_str(elements, str_format=None):
+    """Builds a string of elements joined by 'or'.
+
+    Will join strings with the 'or' word and if a str_format is provided it
+    will be used to format the resulted joined string.
+    If there are no elements an empty string will be returned.
+
+    :param elements: Elements we want to join.
+    :type elements: String or iterable of strings.
+    :param str_format: String to use to format the response.
+    :type str_format: String.
+    """
+    if not elements:
+        return ''
+
+    if not isinstance(elements, six.string_types):
+        elements = _(' or ').join(elements)
+
+    if str_format:
+        return str_format % elements
+    return elements
