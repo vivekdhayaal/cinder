@@ -71,8 +71,9 @@ class VolumeApiTest(test.TestCase):
         self.stubs.Set(volume_api.API, 'delete', stubs.stub_volume_delete)
 
     def test_volume_create(self):
-        self.stubs.Set(volume_api.API, 'get', stubs.stub_volume_get)
-        self.stubs.Set(volume_api.API, "create", stubs.stub_volume_create)
+        self.stubs.Set(volume_api.API, "create", stubs.stub_volume_api_create)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         vol = {"size": 100,
                "display_name": "Volume Test Name",
@@ -159,7 +160,9 @@ class VolumeApiTest(test.TestCase):
                           req, body)
 
     def test_volume_create_with_image_id(self):
-        self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
+        self.stubs.Set(volume_api.API, "create", stubs.stub_volume_api_create)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         self.stubs.Set(volume_api.API, "create", stubs.stub_volume_create)
         self.ext_mgr.extensions = {'os-image-create': 'fake'}
@@ -236,10 +239,16 @@ class VolumeApiTest(test.TestCase):
                           req,
                           body)
 
-    def test_volume_update(self):
-        self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
-        self.stubs.Set(volume_api.API, "update", stubs.stub_volume_update)
-
+    @mock.patch.object(db, 'volume_admin_metadata_get',
+                       return_value={'attached_mode': 'rw',
+                                     'readonly': 'False'})
+    @mock.patch.object(db.sqlalchemy.api, '_volume_type_get_full',
+                       side_effect=stubs.stub_volume_type_get)
+    @mock.patch.object(volume_api.API, 'get',
+                       side_effect=stubs.stub_volume_api_get, autospec=True)
+    @mock.patch.object(volume_api.API, 'update',
+                       side_effect=stubs.stub_volume_update, autospec=True)
+    def test_volume_update(self, *args):
         updates = {
             "display_name": "Updated Test Name",
         }
@@ -264,13 +273,20 @@ class VolumeApiTest(test.TestCase):
             'id': '1',
             'created_at': datetime.datetime(1900, 1, 1, 1, 1, 1),
             'size': 1}}
-        self.assertEqual(res_dict, expected)
-        self.assertEqual(len(fake_notifier.NOTIFICATIONS), 2)
+        self.assertEqual(expected, res_dict)
+        self.assertEqual(2, len(self.notifier.notifications))
 
-    def test_volume_update_metadata(self):
-        self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
-        self.stubs.Set(volume_api.API, "update", stubs.stub_volume_update)
-
+    @mock.patch.object(db, 'volume_admin_metadata_get',
+                       return_value={"qos_max_iops": 2000,
+                                     "readonly": "False",
+                                     "attached_mode": "rw"})
+    @mock.patch.object(db.sqlalchemy.api, '_volume_type_get_full',
+                       side_effect=stubs.stub_volume_type_get)
+    @mock.patch.object(volume_api.API, 'get',
+                       side_effect=stubs.stub_volume_api_get, autospec=True)
+    @mock.patch.object(volume_api.API, 'update',
+                       side_effect=stubs.stub_volume_update, autospec=True)
+    def test_volume_update_metadata(self, *args):
         updates = {
             "metadata": {"qos_max_iops": 2000}
         }
@@ -382,7 +398,9 @@ class VolumeApiTest(test.TestCase):
     def test_volume_list(self):
         self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
         self.stubs.Set(volume_api.API, 'get_all',
-                       stubs.stub_volume_get_all_by_project)
+                       stubs.stub_volume_api_get_all_by_project)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes')
         res_dict = self.controller.index(req)
@@ -455,7 +473,9 @@ class VolumeApiTest(test.TestCase):
     def test_volume_list_detail(self):
         self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
         self.stubs.Set(volume_api.API, 'get_all',
-                       stubs.stub_volume_get_all_by_project)
+                       stubs.stub_volume_api_get_all_by_project)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/detail')
         res_dict = self.controller.index(req)
@@ -523,11 +543,22 @@ class VolumeApiTest(test.TestCase):
                                  'created_at': datetime.datetime(1900, 1, 1,
                                                                  1, 1, 1),
                                  'size': 1}]}
+<<<<<<< HEAD
         self.assertEqual(res_dict, expected)
 
     def test_volume_show(self):
         self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
 
+        self.assertEqual(expected, res_dict)
+
+    @mock.patch.object(db, 'volume_admin_metadata_get',
+                       return_value={'attached_mode': 'rw',
+                                     'readonly': 'False'})
+    @mock.patch.object(volume_api.API, 'get',
+                       side_effect=stubs.stub_volume_api_get, autospec=True)
+    @mock.patch.object(db.sqlalchemy.api, '_volume_type_get_full',
+                       side_effect=stubs.stub_volume_type_get, autospec=True)
+    def test_volume_show(self, *args):
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
         res_dict = self.controller.show(req, '1')
         expected = {'volume': {'status': 'fakestatus',
@@ -556,6 +587,8 @@ class VolumeApiTest(test.TestCase):
             return stubs.stub_volume(volume_id, attach_status='detached')
 
         self.stubs.Set(volume_api.API, 'get', stub_volume_get)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
         res_dict = self.controller.show(req, '1')
@@ -583,6 +616,8 @@ class VolumeApiTest(test.TestCase):
                     volume_glance_metadata=dict(foo='bar')))
 
         self.stubs.Set(volume_api.API, 'get', stub_volume_get)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
         res_dict = self.controller.show(req, '1')
@@ -630,6 +665,8 @@ class VolumeApiTest(test.TestCase):
             self.stubs.Set(db, 'volume_get_all_by_project',
                            stub_volume_get_all_by_project)
             self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
+            self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                           stubs.stub_volume_type_get)
 
             req = fakes.HTTPRequest.blank('/v1/volumes/detail?limit=2\
                                           &offset=1',
@@ -694,23 +731,25 @@ class VolumeApiTest(test.TestCase):
             return stubs.stub_volume(volume_id, encryption_key_id='fake_id')
 
         self.stubs.Set(volume_api.API, 'get', stub_volume_get)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
         res_dict = self.controller.show(req, 1)
         self.assertEqual(res_dict['volume']['encrypted'], True)
 
     def test_volume_show_with_unencrypted_volume(self):
-        def stub_volume_get(self, context, volume_id, **kwargs):
-            return stubs.stub_volume(volume_id, encryption_key_id=None)
-
-        self.stubs.Set(volume_api.API, 'get', stub_volume_get)
+        self.stubs.Set(volume_api.API, 'get', stubs.stub_volume_api_get)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
         res_dict = self.controller.show(req, 1)
         self.assertEqual(res_dict['volume']['encrypted'], False)
 
     def test_volume_delete(self):
-        self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
+        self.stubs.Set(db.sqlalchemy.api, 'volume_get',
+                       stubs.stub_volume_get_db)
 
         req = fakes.HTTPRequest.blank('/v1/volumes/1')
         resp = self.controller.delete(req, 1)
@@ -728,6 +767,8 @@ class VolumeApiTest(test.TestCase):
     def test_admin_list_volumes_limited_to_project(self):
         self.stubs.Set(db, 'volume_get_all_by_project',
                        stubs.stub_volume_get_all_by_project)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/fake/volumes',
                                       use_admin_context=True)
@@ -737,6 +778,8 @@ class VolumeApiTest(test.TestCase):
         self.assertEqual(1, len(res['volumes']))
 
     def test_admin_list_volumes_all_tenants(self):
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
         req = fakes.HTTPRequest.blank('/v1/fake/volumes?all_tenants=1',
                                       use_admin_context=True)
         res = self.controller.index(req)
@@ -747,6 +790,8 @@ class VolumeApiTest(test.TestCase):
         self.stubs.Set(db, 'volume_get_all_by_project',
                        stubs.stub_volume_get_all_by_project)
         self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/fake/volumes?all_tenants=1')
         res = self.controller.index(req)
@@ -757,6 +802,8 @@ class VolumeApiTest(test.TestCase):
         self.stubs.Set(db, 'volume_get_all_by_project',
                        stubs.stub_volume_get_all_by_project)
         self.stubs.Set(db, 'volume_get', stubs.stub_volume_get_db)
+        self.stubs.Set(db.sqlalchemy.api, '_volume_type_get_full',
+                       stubs.stub_volume_type_get)
 
         req = fakes.HTTPRequest.blank('/v1/fake/volumes')
         res = self.controller.index(req)

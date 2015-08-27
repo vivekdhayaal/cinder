@@ -225,7 +225,32 @@ class TestCase(testtools.TestCase):
                                          '..',
                                      )
                                  ),
-                                 'cinder/tests/unit/policy.json'))
+                                 'cinder/tests/unit/policy.json'),
+                             group='oslo_policy')
+
+        self._disable_osprofiler()
+
+        # NOTE(geguileo): This is required because common get_by_id method in
+        # cinder.db.sqlalchemy.api caches get methods and if we use a mocked
+        # get method in one test it would carry on to the next test.  So we
+        # clear out the cache.
+        sqla_api._GET_METHODS = {}
+
+    def _restore_obj_registry(self):
+        objects_base.CinderObjectRegistry._registry._obj_classes = \
+            self._base_test_obj_backup
+
+    def _disable_osprofiler(self):
+        """Disable osprofiler.
+
+        osprofiler should not run for unit tests.
+        """
+
+        side_effect = lambda value: value
+        mock_decorator = mock.MagicMock(side_effect=side_effect)
+        p = mock.patch("osprofiler.profiler.trace_cls",
+                       return_value=mock_decorator)
+        p.start()
 
     def _common_cleanup(self):
         """Runs after each test method to tear down test environment."""

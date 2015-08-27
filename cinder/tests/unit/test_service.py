@@ -201,6 +201,21 @@ class ServiceTestCase(test.TestCase):
                        'report_count': 0,
                        'availability_zone': 'nova',
                        'id': 1}
+        with mock.patch.object(objects.service, 'db') as mock_db,\
+                mock.patch('cinder.db.sqlalchemy.api.get_by_id') as get_by_id:
+            mock_db.service_get_by_args.side_effect = exception.NotFound()
+            mock_db.service_create.return_value = service_ref
+            get_by_id.return_value = service_ref
+
+            serv = service.Service(
+                self.host,
+                self.binary,
+                self.topic,
+                'cinder.tests.unit.test_service.FakeManager'
+            )
+            serv.start()
+            serv.model_disconnected = True
+            serv.report_state()
 
         service.db.service_get_by_args(mox.IgnoreArg(),
                                        host,

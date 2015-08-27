@@ -15,6 +15,8 @@
 import mock
 from oslo_versionedobjects.tests import test_objects
 
+from cinder import context
+from cinder import exception
 from cinder import objects
 from cinder.tests.unit import fake_volume
 
@@ -25,12 +27,21 @@ class TestVolume(test_objects._LocalTest):
         for field, value in db.items():
             test.assertEqual(db[field], obj[field])
 
-    @mock.patch('cinder.db.volume_get')
-    def test_get_by_id(self, volume_get):
+    @mock.patch('cinder.db.volume_glance_metadata_get', return_value={})
+    @mock.patch('cinder.db.sqlalchemy.api.volume_get')
+    def test_get_by_id(self, volume_get, volume_glance_metadata_get):
         db_volume = fake_volume.fake_db_volume()
         volume_get.return_value = db_volume
         volume = objects.Volume.get_by_id(self.context, 1)
         self._compare(self, db_volume, volume)
+        volume_get.assert_called_once_with(self.context, 1)
+
+    @mock.patch('cinder.db.sqlalchemy.api.model_query')
+    def test_get_by_id_no_existing_id(self, model_query):
+        pf = model_query().options().options().options().options().options()
+        pf.filter_by().first.return_value = None
+        self.assertRaises(exception.VolumeNotFound,
+                          objects.Volume.get_by_id, self.context, 123)
 
     @mock.patch('cinder.db.volume_create')
     def test_create(self, volume_create):

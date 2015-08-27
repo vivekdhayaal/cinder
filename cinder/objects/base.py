@@ -25,7 +25,9 @@ from oslo_versionedobjects import base
 from oslo_versionedobjects import fields
 import six
 
+from cinder import db
 from cinder import exception
+from cinder.i18n import _
 from cinder import objects
 
 
@@ -46,6 +48,49 @@ class CinderObject(base.VersionedObject):
     # cinder, and other objects can exist on the same bus and be distinguished
     # from one another.
     OBJ_PROJECT_NAMESPACE = 'cinder'
+
+    # NOTE(thangp): As more objects are added to cinder, each object should
+    # have a custom map of version compatibility.  This just anchors the base
+    # version compatibility.
+    VERSION_COMPATIBILITY = {'7.0.0': '1.0'}
+
+    def cinder_obj_get_changes(self):
+        """Returns a dict of changed fields with tz unaware datetimes.
+
+        Any timezone aware datetime field will be converted to UTC timezone
+        and returned as timezone unaware datetime.
+
+        This will allow us to pass these fields directly to a db update
+        method as they can't have timezone information.
+        """
+        # Get dirtied/changed fields
+        changes = self.obj_get_changes()
+
+        # Look for datetime objects that contain timezone information
+        for k, v in changes.items():
+            if isinstance(v, datetime.datetime) and v.tzinfo:
+                # Remove timezone information and adjust the time according to
+                # the timezone information's offset.
+                changes[k] = v.replace(tzinfo=None) - v.utcoffset()
+
+        # Return modified dict
+        return changes
+
+    @base.remotable_classmethod
+    def get_by_id(cls, context, id, *args, **kwargs):
+        # To get by id we need to have a model and for the model to
+        # have an id field
+        if 'id' not in cls.fields:
+            msg = (_('VersionedObject %s cannot retrieve object by id.') %
+                   (cls.obj_name()))
+            raise NotImplementedError(msg)
+
+        model = db.get_model_for_versioned_object(cls)
+        orm_obj = db.get_by_id(context, model, id, *args, **kwargs)
+        kargs = {}
+        if hasattr(cls, 'DEFAULT_EXPECTED_ATTR'):
+            kargs = {'expected_attrs': getattr(cls, 'DEFAULT_EXPECTED_ATTR')}
+        return cls._from_db_object(context, cls(context), orm_obj, **kargs)
 
 
 class CinderObjectDictCompat(base.VersionedObjectDictCompat):

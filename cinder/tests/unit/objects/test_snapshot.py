@@ -15,8 +15,12 @@
 import mock
 from oslo_versionedobjects.tests import test_objects
 
-from cinder.objects import snapshot as snapshot_obj
-from cinder.objects import volume as volume_obj
+from oslo_log import log as logging
+
+from cinder.db.sqlalchemy import models
+from cinder import exception
+from cinder import objects
+from cinder.tests.unit import fake_snapshot
 from cinder.tests.unit import fake_volume
 
 fake_snapshot = {
@@ -36,11 +40,18 @@ class TestSnapshot(test_objects._LocalTest):
         for field, value in db.items():
             test.assertEqual(db[field], obj[field])
 
-    @mock.patch('cinder.db.snapshot_metadata_get', return_value={})
-    @mock.patch('cinder.db.snapshot_get', return_value=fake_snapshot)
-    def test_get_by_id(self, snapshot_get, snapshot_metadata_get):
-        snapshot = snapshot_obj.Snapshot.get_by_id(self.context, 1)
-        self._compare(self, fake_snapshot, snapshot)
+    @mock.patch('cinder.db.get_by_id', return_value=fake_db_snapshot)
+    def test_get_by_id(self, snapshot_get):
+        snapshot = objects.Snapshot.get_by_id(self.context, 1)
+        self._compare(self, fake_snapshot_obj, snapshot)
+        snapshot_get.assert_called_once_with(self.context, models.Snapshot, 1)
+
+    @mock.patch('cinder.db.sqlalchemy.api.model_query')
+    def test_get_by_id_no_existing_id(self, model_query):
+        query = model_query().options().options().filter_by().first
+        query.return_value = None
+        self.assertRaises(exception.SnapshotNotFound,
+                          objects.Snapshot.get_by_id, self.context, 123)
 
     def test_reset_changes(self):
         snapshot = snapshot_obj.Snapshot()
