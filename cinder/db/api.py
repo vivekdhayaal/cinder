@@ -36,6 +36,8 @@ these objects be simple dictionaries.
 
 """
 
+import six
+
 from oslo_config import cfg
 from oslo_db import api as oslo_db_api
 from oslo_db import options as db_options
@@ -1473,14 +1475,16 @@ class Condition(object):
         self.field = field
 
     def get_filter(self, model, field=None):
-        return IMPL.condition_db_filter(model, self._get_field(field),
+        return IMPL.condition_db_filter(model, self._get_field(model, field),
                                         self.value)
 
-    def _get_field(self, field=None):
+    def _get_field(self, model, field=None):
         # We must have a defined field on initialization or when called
         field = field or self.field
         if not field:
             raise ValueError(_('Condition has no field.'))
+        if isinstance(field, six.string_types):
+            field = getattr(model, field)
         return field
 
 
@@ -1500,7 +1504,8 @@ class Not(Condition):
     def get_filter(self, model, field=None):
         # If implementation has a specific method use it
         if hasattr(IMPL, 'condition_not_db_filter'):
-            return IMPL.condition_not_db_filter(model, self._get_field(field),
+            return IMPL.condition_not_db_filter(model,
+                                                self._get_field(model, field),
                                                 self.value, self.auto_none)
 
         # Otherwise non negated object must adming ~ operator for not

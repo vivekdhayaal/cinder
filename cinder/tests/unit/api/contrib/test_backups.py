@@ -21,6 +21,8 @@ import ddt
 import mock
 from oslo_serialization import jsonutils
 from oslo_utils import timeutils
+from sqlalchemy.dialects import mysql
+from sqlalchemy.engine import base
 import webob
 
 from cinder.api.contrib import backups
@@ -41,6 +43,16 @@ from cinder.tests.unit import utils
 import cinder.volume
 
 NUM_ELEMENTS_IN_BACKUP = 17
+
+
+def service(updated_at=None, availability_zone='fake_az', host='test_host',
+            disabled=False):
+    def side_effect(*args, **kwargs):
+        return [{'availability_zone': availability_zone,
+                 'host': host,
+                 'disabled': disabled,
+                 'updated_at': updated_at or timeutils.utcnow()}]
+    return side_effect
 
 
 @ddt.ddt
@@ -68,7 +80,7 @@ class BackupsAPITestCase(test.TestCase):
                        status=fields.BackupStatus.CREATING,
                        incremental=False,
                        parent_id=None,
-                       size=0, object_count=0, host='testhost',
+                       size=0, object_count=0, host='test_host',
                        num_dependent_backups=0,
                        snapshot_id=None,
                        data_timestamp=None):
@@ -78,7 +90,7 @@ class BackupsAPITestCase(test.TestCase):
         backup['user_id'] = fake.USER_ID
         backup['project_id'] = fake.PROJECT_ID
         backup['host'] = host
-        backup['availability_zone'] = 'az1'
+        backup['availability_zone'] = 'fake_az'
         backup['display_name'] = display_name
         backup['display_description'] = display_description
         backup['container'] = container
@@ -123,7 +135,7 @@ class BackupsAPITestCase(test.TestCase):
             fake_auth_context=self.user_context))
         res_dict = jsonutils.loads(res.body)
         self.assertEqual(200, res.status_int)
-        self.assertEqual('az1', res_dict['backup']['availability_zone'])
+        self.assertEqual('fake_az', res_dict['backup']['availability_zone'])
         self.assertEqual('volumebackups', res_dict['backup']['container'])
         self.assertEqual('this is a test backup',
                          res_dict['backup']['description'])
@@ -284,7 +296,8 @@ class BackupsAPITestCase(test.TestCase):
 
         self.assertEqual(200, res.status_int)
         self.assertEqual(NUM_ELEMENTS_IN_BACKUP, len(res_dict['backups'][0]))
-        self.assertEqual('az1', res_dict['backups'][0]['availability_zone'])
+        self.assertEqual('fake_az',
+                         res_dict['backups'][0]['availability_zone'])
         self.assertEqual('volumebackups',
                          res_dict['backups'][0]['container'])
         self.assertEqual('this is a test backup',
@@ -300,7 +313,8 @@ class BackupsAPITestCase(test.TestCase):
         self.assertIn('updated_at', res_dict['backups'][0])
 
         self.assertEqual(NUM_ELEMENTS_IN_BACKUP, len(res_dict['backups'][1]))
-        self.assertEqual('az1', res_dict['backups'][1]['availability_zone'])
+        self.assertEqual('fake_az',
+                         res_dict['backups'][1]['availability_zone'])
         self.assertEqual('volumebackups',
                          res_dict['backups'][1]['container'])
         self.assertEqual('this is a test backup',
@@ -316,7 +330,8 @@ class BackupsAPITestCase(test.TestCase):
         self.assertIn('updated_at', res_dict['backups'][1])
 
         self.assertEqual(NUM_ELEMENTS_IN_BACKUP, len(res_dict['backups'][2]))
-        self.assertEqual('az1', res_dict['backups'][2]['availability_zone'])
+        self.assertEqual('fake_az',
+                         res_dict['backups'][2]['availability_zone'])
         self.assertEqual('volumebackups', res_dict['backups'][2]['container'])
         self.assertEqual('this is a test backup',
                          res_dict['backups'][2]['description'])
@@ -377,6 +392,90 @@ class BackupsAPITestCase(test.TestCase):
         self.assertEqual(1, len(res_dict['backups']))
         self.assertEqual(200, res.status_int)
         self.assertEqual(backup_id3, res_dict['backups'][0]['id'])
+
+        db.backup_destroy(context.get_admin_context(), backup_id3)
+        db.backup_destroy(context.get_admin_context(), backup_id2)
+        db.backup_destroy(context.get_admin_context(), backup_id1)
+
+    def test_list_backups_detail_xml(self):
+        backup_id1 = self._create_backup()
+        backup_id2 = self._create_backup()
+        backup_id3 = self._create_backup()
+
+        req = webob.Request.blank('/v2/fake/backups/detail')
+        req.method = 'GET'
+        req.headers['Content-Type'] = 'application/xml'
+        req.headers['Accept'] = 'application/xml'
+        res = req.get_response(fakes.wsgi_app())
+
+        self.assertEqual(200, res.status_int)
+        dom = minidom.parseString(res.body)
+        backup_detail = dom.getElementsByTagName('backup')
+
+        self.assertEqual(11, backup_detail.item(0).attributes.length)
+        self.assertEqual(
+            'fake_az', backup_detail.item(0).getAttribute('availability_zone'))
+        self.assertEqual(
+            'volumebackups', backup_detail.item(0).getAttribute('container'))
+        self.assertEqual(
+            'this is a test backup',
+            backup_detail.item(0).getAttribute('description'))
+        self.assertEqual(
+            'test_backup', backup_detail.item(0).getAttribute('name'))
+        self.assertEqual(
+            backup_id3, backup_detail.item(0).getAttribute('id'))
+        self.assertEqual(
+            0, int(backup_detail.item(0).getAttribute('object_count')))
+        self.assertEqual(
+            0, int(backup_detail.item(0).getAttribute('size')))
+        self.assertEqual(
+            fields.BackupStatus.CREATING,
+            backup_detail.item(0).getAttribute('status'))
+        self.assertEqual(
+            1, int(backup_detail.item(0).getAttribute('volume_id')))
+
+        self.assertEqual(11, backup_detail.item(1).attributes.length)
+        self.assertEqual(
+            'fake_az', backup_detail.item(1).getAttribute('availability_zone'))
+        self.assertEqual(
+            'volumebackups', backup_detail.item(1).getAttribute('container'))
+        self.assertEqual(
+            'this is a test backup',
+            backup_detail.item(1).getAttribute('description'))
+        self.assertEqual(
+            'test_backup', backup_detail.item(1).getAttribute('name'))
+        self.assertEqual(
+            backup_id2, backup_detail.item(1).getAttribute('id'))
+        self.assertEqual(
+            0, int(backup_detail.item(1).getAttribute('object_count')))
+        self.assertEqual(
+            0, int(backup_detail.item(1).getAttribute('size')))
+        self.assertEqual(
+            fields.BackupStatus.CREATING,
+            backup_detail.item(1).getAttribute('status'))
+        self.assertEqual(
+            1, int(backup_detail.item(1).getAttribute('volume_id')))
+
+        self.assertEqual(11, backup_detail.item(2).attributes.length)
+        self.assertEqual(
+            'fake_az', backup_detail.item(2).getAttribute('availability_zone'))
+        self.assertEqual(
+            'volumebackups', backup_detail.item(2).getAttribute('container'))
+        self.assertEqual(
+            'this is a test backup',
+            backup_detail.item(2).getAttribute('description'))
+        self.assertEqual(
+            'test_backup', backup_detail.item(2).getAttribute('name'))
+        self.assertEqual(
+            backup_id1, backup_detail.item(2).getAttribute('id'))
+        self.assertEqual(
+            0, int(backup_detail.item(2).getAttribute('object_count')))
+        self.assertEqual(
+            0, int(backup_detail.item(2).getAttribute('size')))
+        self.assertEqual(fields.BackupStatus.CREATING,
+                         backup_detail.item(2).getAttribute('status'))
+        self.assertEqual(
+            1, int(backup_detail.item(2).getAttribute('volume_id')))
 
         db.backup_destroy(context.get_admin_context(), backup_id3)
         db.backup_destroy(context.get_admin_context(), backup_id2)
@@ -713,6 +812,82 @@ class BackupsAPITestCase(test.TestCase):
                           req,
                           body)
 
+    def _fake_exec_with_snapshot(self,
+                                 original_execute=base.Connection.execute):
+        """Fake connection execute for backup restore update query."""
+        # NOTE(geguileo): Backup restore uses Multiple Tables Update
+        # functionality, supported on Postgresql, Microsoft SQL, MySQL,
+        # MariaDB... But not on SQLite so we'll intercept the DB update
+
+        def my_exec(query_self, obj, *multiparams, **params):
+            def get_id(sql, name):
+                pattern = name + '.id = :'
+                pos = sql.index(pattern) + len(pattern)
+                return sql[pos:pos + 4]
+
+            sql = str(obj)
+            if sql.startswith('UPDATE volumes'):
+                # Compile update query for backups
+                compiled = obj.compile(dialect=mysql.dialect())
+
+                # Get the IDs from the request
+                snapshot_id = compiled.binds[get_id(sql, 'snapshots')].value
+                volume_id = compiled.binds[get_id(sql, 'volumes')].value
+
+                # Transform into the SQL query to check that it has the right
+                # contents
+                values = tuple(compiled.binds[x].value or ''
+                               for x in compiled.positiontup)
+                sql = compiled.string % values
+
+                # Split the SQL query into sets we can easily compare
+                pos_set = sql.index('SET')
+                pos_where = sql.index('WHERE')
+                sql_upd = set(map(lambda x: x.strip(),
+                                  sql[6:pos_set].strip().split(',')))
+                sql_set = set(map(lambda x: x.strip(),
+                                  sql[pos_set + 3:pos_where].split(',')))
+                sql_where = set(map(lambda x: x.strip(),
+                                    sql[pos_where + 5:].split('AND')))
+
+                # Expected data in the query
+                expected_upd = {'volumes', 'snapshots'}
+                assert expected_upd == sql_upd
+
+                expected_set = {'volumes.previous_status=volumes.status',
+                                'volumes.status=backing-up',
+                                'volumes.updated_at='}
+                assert expected_set == sql_set
+
+                expected_where = {'volumes.deleted = false',
+                                  'volumes.status = available',
+                                  'snapshots.id = ' + snapshot_id,
+                                  'volumes.id = ' + volume_id,
+                                  'snapshots.status = available'}
+                assert expected_where == sql_where
+
+                # Manually compare the DB conditions
+                snapshot = objects.Snapshot.get_by_id(self.context,
+                                                      snapshot_id)
+                volume = objects.Volume.get_by_id(self.context, volume_id)
+                snapshot_expected_status = snapshot.status
+                if (volume.status != 'available' or
+                        snapshot.status != 'available'):
+                    # If we don't meet the conditions then make sure the query
+                    # will fail
+                    snapshot_expected_status += 'mismatch'
+
+                # Update the volume in the DB
+                volume_table = volume.model.__table__
+                obj = volume_table.update().values(
+                    {volume_table.c.status: 'backing-up',
+                     volume_table.c.previous_status: volume.status}).where(
+                    volume_table.c.id == volume_id)
+
+            res = original_execute(query_self, obj, *multiparams, **params)
+            return res
+        return my_exec
+
     @mock.patch('cinder.db.service_get_all')
     @mock.patch(
         'cinder.api.openstack.wsgi.Controller.validate_name_and_description')
@@ -747,10 +922,16 @@ class BackupsAPITestCase(test.TestCase):
         req = webob.Request.blank('/v2/%s/backups' % fake.PROJECT_ID)
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+
+        if backup_from_snapshot:
+            with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                            side_effect=self._fake_exec_with_snapshot(),
+                            autospec=True):
+                res = req.get_response(fakes.wsgi_app())
+        else:
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(202, res.status_int)
         self.assertIn('id', res_dict['backup'])
@@ -857,7 +1038,12 @@ class BackupsAPITestCase(test.TestCase):
                          fake.WILL_NOT_BE_FOUND_ID,
                          res_dict['itemNotFound']['message'])
 
-    def test_create_backup_with_InvalidVolume(self):
+    @mock.patch('cinder.quota.QUOTAS.rollback')
+    @mock.patch('cinder.quota.QUOTAS.reserve', return_value=mock.sentinel.res)
+    @mock.patch('cinder.backup.api.API._is_backup_service_enabled',
+                return_value=True)
+    def test_create_backup_with_InvalidVolume(self, mock_is_enabled,
+                                              mock_reserve, mock_rollback):
         # need to create the volume referenced below first
         volume_id = utils.create_volume(self.context, size=5,
                                         status='restoring').id
@@ -878,6 +1064,9 @@ class BackupsAPITestCase(test.TestCase):
 
         self.assertEqual(400, res.status_int)
         self.assertEqual(400, res_dict['badRequest']['code'])
+        mock_reserve.assert_called_once_with(
+            mock.ANY, **{'backups': 1, 'backup_gigabytes': size})
+        mock_rollback.assert_called_once_with(mock.ANY, mock.sentinel.res)
 
     @mock.patch('cinder.db.service_get_all')
     def test_create_backup_WithOUT_enabled_backup_service(
@@ -1131,7 +1320,8 @@ class BackupsAPITestCase(test.TestCase):
                          fake.WILL_NOT_BE_FOUND_ID,
                          res_dict['itemNotFound']['message'])
 
-    def test_delete_backup_with_InvalidBackup(self):
+    @mock.patch('cinder.db.service_get_all_by_topic', side_effect=service())
+    def test_delete_backup_with_InvalidBackup(self, __):
         backup_id = self._create_backup()
         req = webob.Request.blank('/v2/%s/backups/%s' % (
                                   fake.PROJECT_ID, backup_id))
@@ -1143,8 +1333,8 @@ class BackupsAPITestCase(test.TestCase):
 
         self.assertEqual(400, res.status_int)
         self.assertEqual(400, res_dict['badRequest']['code'])
-        self.assertEqual('Invalid backup: Backup status must be '
-                         'available or error',
+        self.assertEqual("Invalid backup: Backup status must be available or "
+                         "error and can't have incremental backups.",
                          res_dict['badRequest']['message'])
 
         db.backup_destroy(context.get_admin_context(), backup_id)
@@ -1159,7 +1349,8 @@ class BackupsAPITestCase(test.TestCase):
         backup_id = self._create_backup(volume_id,
                                         status=fields.BackupStatus.AVAILABLE)
         delta_backup_id = self._create_backup(
-            status=fields.BackupStatus.AVAILABLE, incremental=True,
+            status=fields.BackupStatus.AVAILABLE,
+            incremental=True,
             parent_id=backup_id)
 
         req = webob.Request.blank('/v2/%s/backups/%s' % (
@@ -1171,8 +1362,8 @@ class BackupsAPITestCase(test.TestCase):
         res_dict = jsonutils.loads(res.body)
         self.assertEqual(400, res.status_int)
         self.assertEqual(400, res_dict['badRequest']['code'])
-        self.assertEqual('Invalid backup: Incremental backups '
-                         'exist for this backup.',
+        self.assertEqual("Invalid backup: Backup status must be available or "
+                         "error and can't have incremental backups.",
                          res_dict['badRequest']['message'])
 
         db.backup_destroy(context.get_admin_context(), delta_backup_id)
@@ -1193,7 +1384,29 @@ class BackupsAPITestCase(test.TestCase):
             fake_auth_context=self.user_context))
 
         self.assertEqual(404, res.status_int)
+        db.backup_destroy(context.get_admin_context(), backup_id)
 
+    @mock.patch('cinder.db.service_get_all_by_topic', side_effect=service())
+    @mock.patch('cinder.backup.rpcapi.BackupAPI.check_support_to_force_delete',
+                return_value=True)
+    def test_delete_backup_with_InvalidBackup_force_with_dependent(self, *__):
+        volume_id = utils.create_volume(self.context, size=5)['id']
+        backup_id = self._create_backup(volume_id, status='restoring',
+                                        num_dependent_backups=1)
+        backup = self.backup_api.get(self.context, backup_id)
+        delta_backup_id = self._create_backup(status='available',
+                                              incremental=True,
+                                              parent_id=backup_id)
+
+        exc = self.assertRaises(
+            exception.InvalidBackup,
+            self.backup_api.delete, self.context, backup, True)
+
+        self.assertEqual(
+            "Invalid backup: Backup can't have incremental backups.",
+            exc.msg)
+
+        db.backup_destroy(context.get_admin_context(), delta_backup_id)
         db.backup_destroy(context.get_admin_context(), backup_id)
 
     @mock.patch('cinder.backup.api.API._get_available_backup_service_host')
@@ -1212,15 +1425,44 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(202, res.status_int)
         self.assertEqual(backup_id, res_dict['restore']['backup_id'])
         self.assertEqual(volume_id, res_dict['restore']['volume_id'])
         self.assertEqual(volume_name, res_dict['restore']['volume_name'])
+
+    def test_restore_backup_volume_id_specified_xml(self):
+        volume_name = 'test1'
+        backup_id = self._create_backup(status=fields.BackupStatus.AVAILABLE)
+        volume_id = utils.create_volume(self.context,
+                                        size=2,
+                                        display_name=volume_name)['id']
+
+        req = webob.Request.blank('/v2/fake/backups/%s/restore' % backup_id)
+        req.body = '<restore volume_id="%s"/>' % volume_id
+        req.method = 'POST'
+        req.headers['Content-Type'] = 'application/xml'
+        req.headers['Accept'] = 'application/xml'
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+
+        self.assertEqual(202, res.status_int)
+        dom = minidom.parseString(res.body)
+        restore = dom.getElementsByTagName('restore')
+        self.assertEqual(backup_id,
+                         restore.item(0).getAttribute('backup_id'))
+        self.assertEqual(volume_id, restore.item(0).getAttribute('volume_id'))
+
+        db.backup_destroy(context.get_admin_context(), backup_id)
+        db.volume_destroy(context.get_admin_context(), volume_id)
 
     def test_restore_backup_with_no_body(self):
         # omit body from the request
@@ -1287,30 +1529,180 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(202, res.status_int)
         self.assertEqual(backup_id, res_dict['restore']['backup_id'])
 
-    @mock.patch('cinder.db.service_get_all')
-    @mock.patch('cinder.volume.api.API.create')
-    def test_restore_backup_name_specified(self,
-                                           _mock_volume_api_create,
-                                           _mock_service_get_all):
+    @mock.patch('cinder.backup.api.API.get')
+    @mock.patch('cinder.volume.API.delete')
+    @mock.patch('cinder.volume.API.create')
+    def test_restore_backup_race_condition(self, mock_create, mock_delete,
+                                           mock_get):
+        def fake_backup_get(context, db_driver=None):
+            backup = objects.Backup.get_by_id(context, backup_id)
+            backup.status = 'available'
+            return backup
+
+        mock_get.side_effect = fake_backup_get
+
+        # Intercept volume creation to ensure created volume has status of
+        # available
+        def fake_volume_api_create(context, size, name, description):
+            volume_id = utils.create_volume(self.context, status='available',
+                                            size=size)['id']
+            mock_create.volume = objects.Volume.get_by_id(context, volume_id)
+            return mock_create.volume
+
+        backup_id = self._create_backup(size=5, status='restoring')
+        mock_create.side_effect = fake_volume_api_create
+        body = {"restore": {}}
+        req = webob.Request.blank('/v2/fake/backups/%s/restore' %
+                                  backup_id)
+        req.method = 'POST'
+        req.headers['Content-Type'] = 'application/json'
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
+
+        self.assertEqual(400, res.status_int)
+        self.assertEqual(400, res_dict['badRequest']['code'])
+        self.assertEqual('Invalid parameter: Backup and volume status must '
+                         'be available and backup must fit in volume.',
+                         res_dict['badRequest']['message'])
+
+        mock_delete.assert_called_once_with(mock.ANY, mock_create.volume, True,
+                                            False)
+
+    @mock.patch('cinder.volume.API.delete')
+    @mock.patch('cinder.volume.API.create')
+    def test_restore_backup_create_volume_fail(self, mock_create, mock_delete):
+        # Intercept volume creation to ensure created volume has status of
+        # available
+        def fake_volume_api_create(context, size, name, description):
+            volume_id = utils.create_volume(self.context, status='error',
+                                            size=size)['id']
+            mock_create.volume = objects.Volume.get_by_id(context, volume_id)
+            return mock_create.volume
+
+        backup_id = self._create_backup(size=5, status='available')
+        mock_create.side_effect = fake_volume_api_create
+        body = {"restore": {}}
+        req = webob.Request.blank('/v2/fake/backups/%s/restore' %
+                                  backup_id)
+        req.method = 'POST'
+        req.headers['Content-Type'] = 'application/json'
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
+
+        self.assertEqual(400, res.status_int)
+        self.assertEqual(400, res_dict['badRequest']['code'])
+        self.assertEqual('Invalid volume: Created volume %s failed to become '
+                         'available.' % mock_create.volume.id,
+                         res_dict['badRequest']['message'])
+
+        self.assertFalse(mock_delete.called)
+
+    def _fake_connection_execute(self,
+                                 original_execute=base.Connection.execute):
+        """Fake connection execute for backup restore update query."""
+        # NOTE(geguileo): Backup restore uses Multiple Tables Update
+        # functionality, supported on Postgresql, Microsoft SQL, MySQL,
+        # MariaDB... But not on SQLite so we'll intercept the DB update
+
+        def my_exec(query_self, obj, *multiparams, **params):
+            def get_id(sql, name):
+                pattern = name + '.id = :'
+                pos = sql.index(pattern) + len(pattern)
+                return sql[pos:pos + 4]
+
+            sql = str(obj)
+            if sql.startswith('UPDATE'):
+                # Compile update query for backups
+                compiled = obj.compile(dialect=mysql.dialect())
+
+                # Get the IDs from the request
+                backup_id = compiled.binds[get_id(sql, 'backups')].value
+                volume_id = compiled.binds[get_id(sql, 'volumes')].value
+
+                # Transform into the SQL query to check that it has the right
+                # contents
+                values = tuple(compiled.binds[x].value or ''
+                               for x in compiled.positiontup)
+                sql = compiled.string % values
+
+                # Split the SQL query into sets we can easily compare
+                pos_set = sql.index('SET')
+                pos_where = sql.index('WHERE')
+                sql_upd = set(map(lambda x: x.strip(),
+                                  sql[6:pos_set].strip().split(',')))
+                sql_set = set(map(lambda x: x.strip(),
+                                  sql[pos_set + 3:pos_where].split(',')))
+                sql_where = set(map(lambda x: x.strip(),
+                                    sql[pos_where + 5:].split('AND')))
+
+                # Expected data in the query
+                expected_upd = {'backups', 'volumes'}
+                assert expected_upd == sql_upd
+
+                expected_set = {'volumes.status=restoring-backup',
+                                'volumes.updated_at=',
+                                'backups.updated_at=',
+                                'backups.status=restoring'}
+                assert expected_set == sql_set
+
+                expected_where = {'backups.deleted = false',
+                                  'backups.id = ' + backup_id,
+                                  'volumes.id = ' + volume_id,
+                                  'backups.status = available',
+                                  'volumes.status = available',
+                                  'backups.size <= volumes.size'}
+                assert expected_where == sql_where
+
+                # Manually compare the DB conditions
+                backup = objects.Backup.get_by_id(self.context, backup_id)
+                volume = objects.Volume.get_by_id(self.context, volume_id)
+                backup_expected_status = backup.status
+                if (volume.status != 'available' or
+                        backup.status != 'available' or
+                        backup.size > volume.size):
+                    # If we don't meet the conditions then make sure the query
+                    # will fail
+                    backup_expected_status += 'mismatch'
+
+                # Update the backup in the DB
+                backup_table = backup.model.__table__
+                obj = backup_table.update().values(
+                    {backup_table.c.status: 'restoring'}).where(
+                    backup_table.c.id == backup_id).where(
+                    backup_table.c.status == backup_expected_status)
+
+            res = original_execute(query_self, obj, *multiparams, **params)
+            return res
+        return my_exec
+
+    @mock.patch('cinder.volume.API.create')
+    def test_restore_backup_name_specified(self, mock_volume_api_create):
         # Intercept volume creation to ensure created volume
         # has status of available
         def fake_volume_api_create(context, size, name, description):
-            volume_id = utils.create_volume(self.context, size=size,
-                                            display_name=name).id
-            return db.volume_get(context, volume_id)
+            return utils.create_volume(self.context, size=size,
+                                       display_name=name,
+                                       description=description)
 
-        _mock_volume_api_create.side_effect = fake_volume_api_create
-        _mock_service_get_all.return_value = [
-            {'availability_zone': 'az1', 'host': 'testhost',
-             'disabled': 0, 'updated_at': timeutils.utcnow()}]
+        mock_volume_api_create.side_effect = fake_volume_api_create
 
         backup_id = self._create_backup(size=5,
                                         status=fields.BackupStatus.AVAILABLE)
@@ -1320,14 +1712,16 @@ class BackupsAPITestCase(test.TestCase):
                                   (fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         description = 'auto-created_from_restore_from_backup'
         # Assert that we have indeed passed on the name parameter
-        _mock_volume_api_create.assert_called_once_with(
+        mock_volume_api_create.assert_called_once_with(
             mock.ANY,
             5,
             body['restore']['name'],
@@ -1350,10 +1744,12 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(202, res.status_int)
         self.assertEqual(backup_id, res_dict['restore']['backup_id'])
@@ -1401,15 +1797,17 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(400, res.status_int)
         self.assertEqual(400, res_dict['badRequest']['code'])
-        self.assertEqual('Invalid volume: Volume to be restored to must '
-                         'be available',
+        self.assertEqual('Invalid parameter: Backup and volume status must '
+                         'be available and backup must fit in volume.',
                          res_dict['badRequest']['message'])
 
         db.volume_destroy(context.get_admin_context(), volume_id)
@@ -1553,16 +1951,17 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(400, res.status_int)
         self.assertEqual(400, res_dict['badRequest']['code'])
-        self.assertEqual('Invalid volume: volume size %d is too '
-                         'small to restore backup of size %d.'
-                         % (volume_size, backup_size),
+        self.assertEqual('Invalid parameter: Backup and volume status must '
+                         'be available and backup must fit in volume.',
                          res_dict['badRequest']['message'])
 
         db.volume_destroy(context.get_admin_context(), volume_id)
@@ -1584,10 +1983,12 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=self._fake_connection_execute(),
+                        autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(202, res.status_int)
         self.assertEqual(backup_id, res_dict['restore']['backup_id'])
@@ -1614,10 +2015,12 @@ class BackupsAPITestCase(test.TestCase):
                                   fake.PROJECT_ID, backup_id))
         req.method = 'POST'
         req.headers['Content-Type'] = 'application/json'
-        req.body = jsonutils.dump_as_bytes(body)
-        res = req.get_response(fakes.wsgi_app(
-            fake_auth_context=self.user_context))
-        res_dict = jsonutils.loads(res.body)
+        req.body = json.dumps(body)
+        side_effect = self._fake_connection_execute(base.Connection.execute)
+        with mock.patch('sqlalchemy.engine.base.Connection.execute',
+                        side_effect=side_effect, autospec=True):
+            res = req.get_response(fakes.wsgi_app())
+        res_dict = json.loads(res.body)
 
         self.assertEqual(202, res.status_int)
         self.assertEqual(backup_id, res_dict['restore']['backup_id'])

@@ -610,14 +610,17 @@ class BackupManager(manager.SchedulerDependentManager):
             LOG.exception(_LE("Failed to update usages deleting backup"))
 
         backup.destroy()
-        # If this backup is incremental backup, handle the
-        # num_dependent_backups of parent backup
+        # If this backup is incremental backup, decrease number of backups
         if backup.parent_id:
-            parent_backup = objects.Backup.get_by_id(context,
-                                                     backup.parent_id)
-            if parent_backup.has_dependent_backups:
-                parent_backup.num_dependent_backups -= 1
-                parent_backup.save()
+            model = objects.Backup.model
+            res = self.db.conditional_update(
+                context, model,
+                {'num_dependent_backups': model.num_dependent_backups - 1},
+                {'id': backup.parent_id,
+                 'num_dependent_backups': self.db.Not(0)})
+            if not res:
+                LOG.error(_LE("Couldn't decrease descendents in %s."),
+                          backup.parent_id)
         # Commit the reservations
         if reservations:
             QUOTAS.commit(context, reservations,

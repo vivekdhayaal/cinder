@@ -5639,19 +5639,20 @@ def condition_db_filter(model, field, value):
     a valid match (OR), so we'll use SQL IN operator.
 
     If it's not an iterator == operator will be used.
+
+    field parameter must be an ORM field, not a string.
     """
-    orm_field = getattr(model, field)
     # For values that must match and are iterables we use IN
     if (isinstance(value, collections.Iterable) and
             not isinstance(value, six.string_types)):
         # We cannot use in_ when one of the values is None
         if None not in value:
-            return orm_field.in_(value)
+            return field.in_(value)
 
-        return or_(orm_field == v for v in value)
+        return or_(field == v for v in value)
 
     # For values that must match and are not iterables we use ==
-    return orm_field == value
+    return field == value
 
 
 def condition_not_db_filter(model, field, value, auto_none=True):
@@ -5664,6 +5665,8 @@ def condition_not_db_filter(model, field, value, auto_none=True):
 
     If auto_none is True then we'll consider NULL values as different as well,
     like we do in Python and not like SQL does.
+
+    field parameter must be an ORM field, not a string.
     """
     result = ~condition_db_filter(model, field, value)
 
@@ -5672,8 +5675,7 @@ def condition_not_db_filter(model, field, value, auto_none=True):
                   not isinstance(value, six.string_types)
                   and None not in value)
                  or (value is not None))):
-        orm_field = getattr(model, field)
-        result = or_(result, orm_field.is_(None))
+        result = or_(result, field.is_(None))
 
     return result
 

@@ -33,7 +33,7 @@ from cinder.backup import rpcapi as backup_rpcapi
 from cinder import context
 from cinder.db import base
 from cinder import exception
-from cinder.i18n import _, _LI
+from cinder.i18n import _, _LI, _LE
 from cinder import objects
 from cinder.objects import fields
 import cinder.policy
@@ -94,26 +94,27 @@ class API(base.Base):
         :raises: ServiceNotFound
         """
         check_policy(context, 'delete')
-        if not force and backup.status not in [fields.BackupStatus.AVAILABLE,
-                                               fields.BackupStatus.ERROR]:
-            msg = _('Backup status must be available or error')
-            raise exception.InvalidBackup(reason=msg)
         if force and not self._check_support_to_force_delete(context,
                                                              backup.host):
             msg = _('force delete')
             raise exception.NotSupportedOperation(operation=msg)
 
-        # Don't allow backup to be deleted if there are incremental
-        # backups dependent on it.
-        deltas = self.get_all(context, search_opts={'parent_id': backup.id})
-        if deltas and len(deltas):
-            msg = _('Incremental backups exist for this backup.')
-            raise exception.InvalidBackup(reason=msg)
+        # Don't allow backup to be deleted when there are child backups.
+        expected = {'num_dependent_backups': (0, None)}
 
-        backup.status = fields.BackupStatus.DELETING
-        backup.host = self._get_available_backup_service_host(
+        if not force:
+            expected['status'] = (fields.BackupStatus.AVAILABLE,
+                                  fields.BackupStatus.ERROR)
+
+        host = self._get_available_backup_service_host(
             backup.host, backup.availability_zone)
-        backup.save()
+        value = {'status': fields.BackupStatus.DELETING, 'host': host}
+
+        if not backup.conditional_update(value, expected):
+            status = utils.build_or_str(expected.get('status'),
+                                        (' status must be %s and'))
+            msg = _("Backup%s can't have incremental backups.") % status
+            raise exception.InvalidBackup(reason=msg)
         self.backup_rpcapi.delete_backup(context, backup)
 
     def get_all(self, context, search_opts=None, marker=None, limit=None,
@@ -321,7 +322,7 @@ class API(base.Base):
         parent_id = None
         if latest_backup:
             parent_id = latest_backup.id
-            if latest_backup['status'] != fields.BackupStatus.AVAILABLE:
+            if latest_backup.status != fields.BackupStatus.AVAILABLE:
                 msg = _('The parent backup must be available for '
                         'incremental backup.')
                 raise exception.InvalidBackup(reason=msg)
@@ -331,11 +332,27 @@ class API(base.Base):
             snapshot = objects.Snapshot.get_by_id(context, snapshot_id)
             data_timestamp = snapshot.created_at
 
-        self.db.volume_update(context, volume_id,
-                              {'status': 'backing-up',
-                               'previous_status': previous_status})
+        if snapshot_id:
+            expected = {'status': 'available',
+                        snapshot.model.id: snapshot_id,
+                        snapshot.model.status: 'available'}
+            status_msg = ' and the status as well'
+        else:
+            expected = {'status': ('available', 'in-use') if force
+                        else 'available'}
+            status_msg = '' if force else ' or in-use if force flag is used'
+        values = {'status': 'backing-up',
+                  'previous_status': volume.model.status}
+
+        if not volume.conditional_update(values, expected):
+            QUOTAS.rollback(context, reservations)
+            msg = (_('Volume to back up must be %(status)s%(status_msg)s.') %
+                   {'status': utils.build_or_str(values['status']),
+                    'status_msg': status_msg})
+            raise exception.InvalidVolume(reason=msg)
 
         backup = None
+        increased = False
         try:
             kwargs = {
                 'user_id': context.user_id,
@@ -356,31 +373,62 @@ class API(base.Base):
             if not snapshot_id:
                 backup.data_timestamp = backup.created_at
                 backup.save()
+
+            # As soon as we have a record in the DB  pointing to a parent we
+            # must update the parent's record as well.
+            if latest_backup:
+                increased = self.change_dependent(latest_backup, True)
+                if not increased:
+                    msg = _("Couldn't increase descendents in %s.") % parent_id
+                    raise exception.InvalidVolume(reason=msg)
             QUOTAS.commit(context, reservations)
         except Exception:
             with excutils.save_and_reraise_exception():
                 try:
                     if backup and 'id' in backup:
                         backup.destroy()
+                        if increased:
+                            self.change_dependent(latest_backup, False)
                 finally:
                     QUOTAS.rollback(context, reservations)
 
-        # TODO(DuncanT): In future, when we have a generic local attach,
-        #                this can go via the scheduler, which enables
-        #                better load balancing and isolation of services
         self.backup_rpcapi.create_backup(context, backup)
 
         return backup
+
+    def change_dependent(self, backup, is_increase):
+        """Increase/decrease num_dependent_backups of a backup."""
+        num_desc_field = backup.model.num_dependent_backups
+
+        if is_increase:
+            expected = {'status': 'available'}
+            # Since we allow NULL values in the DB, we have to take them into
+            # account when increasing the counter.
+            descendants = self.db.Case([(num_desc_field.is_(None), 1)],
+                                       else_=num_desc_field + 1)
+        else:
+            expected = {'num_dependent_backups': self.db.Not(0)}
+            descendants = num_desc_field - 1
+
+        res = backup.conditional_update({'num_dependent_backups': descendants},
+                                        expected, reflect_changes=False)
+
+        if not res:
+            operation = 'increase' if is_increase else 'decrease'
+            LOG.error(_LE("Couldn't %(operation)s the number of dependent "
+                          "backups in backup with id %(id)s."),
+                      {'operation': operation, 'id': backup.id})
+        return res
 
     def restore(self, context, backup_id, volume_id=None, name=None):
         """Make the RPC call to restore a volume backup."""
         check_policy(context, 'restore')
         backup = self.get(context, backup_id)
-        if backup['status'] != fields.BackupStatus.AVAILABLE:
+        if backup.status != fields.BackupStatus.AVAILABLE:
             msg = _('Backup status must be available')
             raise exception.InvalidBackup(reason=msg)
 
-        size = backup['size']
+        size = backup.size
         if size is None:
             msg = _('Backup to be restored has invalid size')
             raise exception.InvalidBackup(reason=msg)
@@ -397,27 +445,44 @@ class API(base.Base):
                          "backup %(backup_id)s."),
                      {'size': size, 'backup_id': backup_id})
             volume = self.volume_api.create(context, size, name, description)
-            volume_id = volume['id']
 
-            while True:
-                volume = self.volume_api.get(context, volume_id)
-                if volume['status'] != 'creating':
-                    break
+            while volume.status == 'creating':
                 greenthread.sleep(1)
+                volume = self.volume_api.get(context, volume.id)
         else:
             volume = self.volume_api.get(context, volume_id)
 
-        if volume['status'] != "available":
-            msg = _('Volume to be restored to must be available')
-            raise exception.InvalidVolume(reason=msg)
+        # NOTE(geguileo): We will be checking backup status on the conditional
+        # update even when we have already checked it earlier.  Earlier check
+        # was meant to prevent needles creation of a volume in most of the
+        # cases, and this check is meant to prevent races.
+        expected = {backup.model.status: fields.BackupStatus.AVAILABLE,
+                    volume.model.status: 'available',
+                    volume.model.id: volume.id}
+        changes = {backup.model.status: fields.BackupStatus.RESTORING,
+                   volume.model.status: 'restoring-backup'}
+        filters = [backup.model.size <= volume.model.size]
 
-        LOG.debug('Checking backup size %(bs)s against volume size %(vs)s',
-                  {'bs': size, 'vs': volume['size']})
-        if size > volume['size']:
-            msg = (_('volume size %(volume_size)d is too small to restore '
-                     'backup of size %(size)d.') %
-                   {'volume_size': volume['size'], 'size': size})
-            raise exception.InvalidVolume(reason=msg)
+        if not backup.conditional_update(changes, expected, filters):
+            if volume_id is None:
+                if volume.status != 'available':
+                    msg = (_('Created volume %s failed to become available.')
+                           % volume.id)
+                    raise exception.InvalidVolume(reason=msg)
+
+                # We only delete created volume when we encounter a race to
+                # maintain previous behavior.
+                if backup.size <= volume.size:
+                    LOG.debug('Race condition detected on backup restore, '
+                              'deleting created volume.')
+                    try:
+                        self.volume_api.delete(context, volume, True, False)
+                    except Exception:
+                        LOG.error(_LE("Couldn't delete new volume for backup "
+                                      "restore."))
+            msg = _('Invalid parameter: Backup and volume status must be '
+                    'available and backup must fit in volume.')
+            raise exception.Invalid(message=msg)
 
         LOG.info(_LI("Overwriting volume %(volume_id)s with restore of "
                      "backup %(backup_id)s"),
@@ -440,7 +505,9 @@ class API(base.Base):
              'volume_id': volume_id,
              'volume_name': volume['display_name'], }
 
-        return d
+        return {'backup_id': backup_id,
+                'volume_id': volume.id,
+                'volume_name': volume['display_name']}
 
     def reset_status(self, context, backup_id, status):
         """Make the RPC call to reset a volume backup's status.

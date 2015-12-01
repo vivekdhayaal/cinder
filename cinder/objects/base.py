@@ -394,20 +394,18 @@ class CinderPersistentObject(object):
             # If we have used a Case, a db field or an expression in values we
             # don't know which value was used, so we need to read the object
             # back from the DB
-            if any(isinstance(v, self.Case) or db.is_orm_value(v)
-                   for v in values.values()):
+            if any(isinstance(v, self.Case) or db.is_orm_value(v) or
+                   db.is_orm_value(k) for k, v in values.items()):
                 # Read back object from DB
-                obj = type(self).get_by_id(self._context, self.id)
-                db_values = obj.obj_to_primitive()['versioned_object.data']
-                # Only update fields were changes were requested
-                values = {field: db_values[field]
-                          for field, value in values.items()}
+                self.refresh()
 
-            # NOTE(geguileo): We don't use update method because our objects
-            # will eventually move away from VersionedObjectDictCompat
-            for key, value in values.items():
-                setattr(self, key, value)
-            self.obj_reset_changes(values.keys())
+            else:
+                # NOTE(geguileo): We don't use update method because our
+                # objects will eventually move away from
+                # VersionedObjectDictCompat
+                for key, value in values.items():
+                    setattr(self, key, value)
+                self.obj_reset_changes(values.keys())
         return result
 
     def refresh(self):
