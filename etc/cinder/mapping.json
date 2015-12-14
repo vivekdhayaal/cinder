@@ -1,0 +1,149 @@
+{
+"resource_format" : "jrn:jcs:tenant_id:resourceType",
+
+
+"/v2/{tenant_id}/backups"                           : {
+    "POST" : [{
+        "action": "jrn:jcs:sbs:createBackup",
+        "resourceType": "backup"}],
+    "GET" : [{
+        "action": "jrn:jcs:sbs:listBackups",
+        "isResourceIdRequired" : "true",
+        "resourceType": "backup"}]
+},
+"/v2/{tenant_id}/backups/detail"                    : {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:listBackupsDetail",
+        "resourceType": "backup"}]
+},
+"/v2/{tenant_id}/backups/{backup_id}"               : {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showBackup",
+        "isResourceIdRequired" : "true",
+        "resourceType": "backup"}],
+    "DELETE" : [{
+        "action": "jrn:jcs:sbs:deleteBackup",
+        "isResourceIdRequired" : "true",
+        "resourceType": "backup"}]
+}, 
+"/v2/{tenant_id}/backups/{backup_id}/action"        : {
+    "POST" : {
+    "os-force_delete" : [{
+        "action": "jrn:jcs:sbs:forceDeleteBackup",
+        "isResourceIdRequired" : "true",
+        "resourceType": "backup"}]}
+},
+
+
+"/v2/{tenant_id}/volumes"                       :  {
+    "POST" : [{
+        "action": "jrn:jcs:sbs:createVolume",
+        "resourceType": "volume"}],
+    "GET" : [{
+        "action": "jrn:jcs:sbs:listVolumes",
+        "resourceType": "volume"}]
+},
+"/v2/{tenant_id}/volumes/detail"                :  {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:listVolumesDetail",
+        "resourceType": "volume"}]
+},
+"/v2/{tenant_id}/volumes/{volume_id}"           :  {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showVolume",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "PUT" : [{
+        "action": "jrn:jcs:sbs:updateVolume",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "DELETE" : [{
+        "action": "jrn:jcs:sbs:deleteVolume",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}]
+}, 
+"/v2/{tenant_id}/volumes/{volume_id}/metadata"  :  {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showVolumeMetadata",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "PUT" : [{
+        "action": "jrn:jcs:sbs:updateVolumeMetadata",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}]
+}, 
+"/v2/{tenant_id}/volumes/{volume_id}/action"    :  {
+    "POST" : {
+    "os-reset_status" : [{
+        "action" : "jrn:jcs:sbs:resetVolumeStatus",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "os-set_image_metadata" : [{
+        "action" : "jrn:jcs:sbs:setImageMetadata",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "os-unset_image_metadata" : [{
+        "action" : "jrn:jcs:sbs:unsetImageMetadata",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "os-attach" : [{
+        "action" : "jrn:jcs:sbs:attachVolume",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}],
+    "os-force_detach" : [{
+        "action" : "jrn:jcs:sbs:forceDetachVolume",
+        "isResourceIdRequired" : "true",
+        "resourceType": "volume"}]}
+},
+"/v2/{tenant_id}/os-vol-image-meta" : {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showImageMetadata",
+        "resourceType": "volume"}]
+},
+	
+
+"/v2/{tenant_id}/os-quota-sets/defaults"               : {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showDefaultQuotas",
+        "resourceType": "quota"}]
+},
+"/v2/{tenant_id}/os-quota-sets/{tenant_id}"            : { 
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showQuotas",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}],
+    "PUT" : [{
+        "action": "jrn:jcs:sbs:updateQuotas",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}],
+    "DELETE" : [{
+        "action": "jrn:jcs:sbs:deleteQuotas",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}]
+}, 
+"/v2/{tenant_id}/os-quota-sets/{tenant_id}/{user_id}"  : {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showUserQuotas",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}],
+    "PUT" : [{
+        "action": "jrn:jcs:sbs:updateUserQuotas",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}],
+    "DELETE" : [{
+        "action": "jrn:jcs:sbs:deleteUserQuotas",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}]
+}, 
+"/v2/{tenant_id}/os-quota-sets/{tenant_id}/detail/{user_id}"  : {
+    "GET" : [{
+        "action": "jrn:jcs:sbs:showUserQuotasDetail",
+        "isResourceIdRequired" : "true",
+        "resourceType": "quota"}]
+}, 
+"/v2/{tenant_id}/limits" : {
+    "GET" : [{
+       "action": "jrn:jcs:sbs:showAbsoluteLimits",
+       "resourceType": "quota"}]
+} 
+}
