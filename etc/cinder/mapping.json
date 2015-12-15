@@ -38,7 +38,8 @@
 "/v2/{tenant_id}/volumes"                       :  {
     "POST" : [{
         "action": "jrn:jcs:sbs:createVolume",
-        "resourceType": "volume"}],
+        "isResourceIdRequired" : "true",
+        "resourceType": "tenant_id"}],
     "GET" : [{
         "action": "jrn:jcs:sbs:listVolumes",
         "resourceType": "volume"}]
@@ -89,11 +90,23 @@
     "os-attach" : [{
         "action" : "jrn:jcs:sbs:attachVolume",
         "isResourceIdRequired" : "true",
+        "resourceType": "instance",
+        "resourceParamSource": "jsonBody",
+        "jsonPath": "os-attach.instance_uuid"},
+        {
+        "action" : "jrn:jcs:sbs:attachVolume",
+        "isResourceIdRequired" : "true",
         "resourceType": "volume"}],
     "os-force_detach" : [{
         "action" : "jrn:jcs:sbs:forceDetachVolume",
         "isResourceIdRequired" : "true",
-        "resourceType": "volume"}]}
+        "resourceType": "volume"},
+        {
+        "action" : "jrn:jcs:sbs:forceDetachVolume",
+        "isResourceIdRequired" : "true",
+        "resourceParamSource": "jsonBody",
+        "jsonPath": "os-force_detach.attachment_id",
+        "resourceType": "attachment"}]}
 },
 "/v2/{tenant_id}/os-vol-image-meta" : {
     "GET" : [{
@@ -105,45 +118,45 @@
 "/v2/{tenant_id}/os-quota-sets/defaults"               : {
     "GET" : [{
         "action": "jrn:jcs:sbs:showDefaultQuotas",
-        "resourceType": "quota"}]
+        "resourceType": "tenant_id"}]
 },
 "/v2/{tenant_id}/os-quota-sets/{tenant_id}"            : { 
     "GET" : [{
         "action": "jrn:jcs:sbs:showQuotas",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}],
+        "resourceType": "tenant_id"}],
     "PUT" : [{
         "action": "jrn:jcs:sbs:updateQuotas",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}],
+        "resourceType": "tenant_id"}],
     "DELETE" : [{
         "action": "jrn:jcs:sbs:deleteQuotas",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}]
+        "resourceType": "tenant_id"}]
 }, 
 "/v2/{tenant_id}/os-quota-sets/{tenant_id}/{user_id}"  : {
     "GET" : [{
         "action": "jrn:jcs:sbs:showUserQuotas",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}],
+        "resourceType": "tenant_id"}],
     "PUT" : [{
         "action": "jrn:jcs:sbs:updateUserQuotas",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}],
+        "resourceType": "tenant_id"}],
     "DELETE" : [{
         "action": "jrn:jcs:sbs:deleteUserQuotas",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}]
+        "resourceType": "tenant_id"}]
 }, 
 "/v2/{tenant_id}/os-quota-sets/{tenant_id}/detail/{user_id}"  : {
     "GET" : [{
         "action": "jrn:jcs:sbs:showUserQuotasDetail",
         "isResourceIdRequired" : "true",
-        "resourceType": "quota"}]
+        "resourceType": "tenant_id"}]
 }, 
 "/v2/{tenant_id}/limits" : {
     "GET" : [{
        "action": "jrn:jcs:sbs:showAbsoluteLimits",
-       "resourceType": "quota"}]
-} 
+       "resourceType": "tenant_id"}]
+}
 }
