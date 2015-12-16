@@ -5,16 +5,18 @@
 "/v2/{tenant_id}/backups"                           : {
     "POST" : [{
         "action": "jrn:jcs:sbs:createBackup",
-        "resourceType": "backup"}],
+        "isResourceIdRequired" : "true",
+        "resourceType": "tenant_id"}],
     "GET" : [{
         "action": "jrn:jcs:sbs:listBackups",
         "isResourceIdRequired" : "true",
-        "resourceType": "backup"}]
+        "resourceType": "tenant_id"}]
 },
 "/v2/{tenant_id}/backups/detail"                    : {
     "GET" : [{
         "action": "jrn:jcs:sbs:listBackupsDetail",
-        "resourceType": "backup"}]
+        "isResourceIdRequired" : "true",
+        "resourceType": "tenant_id"}]
 },
 "/v2/{tenant_id}/backups/{backup_id}"               : {
     "GET" : [{
@@ -42,12 +44,14 @@
         "resourceType": "tenant_id"}],
     "GET" : [{
         "action": "jrn:jcs:sbs:listVolumes",
-        "resourceType": "volume"}]
+        "isResourceIdRequired" : "true",
+        "resourceType": "tenant_id"}]
 },
 "/v2/{tenant_id}/volumes/detail"                :  {
     "GET" : [{
         "action": "jrn:jcs:sbs:listVolumesDetail",
-        "resourceType": "volume"}]
+        "isResourceIdRequired" : "true",
+        "resourceType": "tenant_id"}]
 },
 "/v2/{tenant_id}/volumes/{volume_id}"           :  {
     "GET" : [{
@@ -157,6 +161,7 @@
 "/v2/{tenant_id}/limits" : {
     "GET" : [{
        "action": "jrn:jcs:sbs:showAbsoluteLimits",
+       "isResourceIdRequired" : "true",
        "resourceType": "tenant_id"}]
 }
 }
