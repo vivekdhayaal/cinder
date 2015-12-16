@@ -1,6 +1,4 @@
 {
-"resource_format" : "jrn:jcs:tenant_id:resourceType",
-
 
 "/v2/{tenant_id}/backups"                           : {
     "POST" : [{
@@ -67,28 +65,10 @@
         "isResourceIdRequired" : "true",
         "resourceType": "volume"}]
 }, 
-"/v2/{tenant_id}/volumes/{volume_id}/metadata"  :  {
-    "GET" : [{
-        "action": "jrn:jcs:sbs:showVolumeMetadata",
-        "isResourceIdRequired" : "true",
-        "resourceType": "volume"}],
-    "PUT" : [{
-        "action": "jrn:jcs:sbs:updateVolumeMetadata",
-        "isResourceIdRequired" : "true",
-        "resourceType": "volume"}]
-}, 
 "/v2/{tenant_id}/volumes/{volume_id}/action"    :  {
     "POST" : {
     "os-reset_status" : [{
         "action" : "jrn:jcs:sbs:resetVolumeStatus",
-        "isResourceIdRequired" : "true",
-        "resourceType": "volume"}],
-    "os-set_image_metadata" : [{
-        "action" : "jrn:jcs:sbs:setImageMetadata",
-        "isResourceIdRequired" : "true",
-        "resourceType": "volume"}],
-    "os-unset_image_metadata" : [{
-        "action" : "jrn:jcs:sbs:unsetImageMetadata",
         "isResourceIdRequired" : "true",
         "resourceType": "volume"}],
     "os-attach" : [{
@@ -122,6 +102,7 @@
 "/v2/{tenant_id}/os-quota-sets/defaults"               : {
     "GET" : [{
         "action": "jrn:jcs:sbs:showDefaultQuotas",
+        "isResourceIdRequired" : "true",
         "resourceType": "tenant_id"}]
 },
 "/v2/{tenant_id}/os-quota-sets/{tenant_id}"            : { 
