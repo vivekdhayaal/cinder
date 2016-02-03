@@ -14,10 +14,14 @@
       License for the specific language governing permissions and limitations
       under the License.
 
+Cinder uses a messaging system to allow its components to communicate in a loosely coupled fashion. Cinder supports the below messaging systems:
+* AMQP based messaging systems like RabbitMQ, Qpid
+* Distributed messaging system - ZeroMQ
+
 AMQP and Cinder
 ===============
 
-AMQP is the messaging technology chosen by the OpenStack cloud.  The AMQP broker, either RabbitMQ or Qpid, sits between any two Cinder components and allows them to communicate in a loosely coupled fashion. More precisely, Cinder components (the compute fabric of OpenStack) use Remote Procedure Calls (RPC hereinafter) to communicate to one another; however such a paradigm is built atop the publish/subscribe paradigm so that the following benefits can be achieved:
+The AMQP broker, either RabbitMQ or Qpid, sits between any two Cinder components and allows them to communicate in a loosely coupled fashion. More precisely, Cinder components (the compute fabric of OpenStack) use Remote Procedure Calls (RPC hereinafter) to communicate to one another; however such a paradigm is built atop the publish/subscribe paradigm so that the following benefits can be achieved:
 
     * Decoupling between client and servant (such as the client does not need to know where the servant's reference is).
     * Full a-synchronism between client and servant (such as the client does not need the servant to run at the same time of the remote call).
@@ -149,3 +153,11 @@ More precisely Consumers need the following parameters:
           * 2 or "persistent": the message is persistent. Which means the message is stored both in-memory, and on disk, and therefore preserved if the server dies or restarts.
 
 The default value is 2 (persistent). During a send operation, Publishers can override the delivery mode of messages so that, for example, transient messages can be sent over a durable queue.
+
+ZeroMQ and Cinder
+=================
+
+ZeroMQ is a very lightweight distributed messaging system specially designed for high throughput/low latency scenarios. ZeroMQ helps cinder scale out with high performance and be highly available as there is no centralised broker.
+
+ZeroMQ can be enabled by setting the below entry in cinder config file:
+    rpc_backend=zmq

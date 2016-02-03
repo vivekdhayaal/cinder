@@ -16,14 +16,15 @@
 Client side of the volume RPC API.
 """
 
+from oslo_config import cfg
 from oslo_serialization import jsonutils
 
 from cinder.common import constants
 from cinder import quota
 from cinder import rpc
-from cinder.volume import utils
 
 
+CONF = cfg.CONF
 QUOTAS = quota.QUOTAS
 
 
@@ -118,8 +119,14 @@ class VolumeAPI(rpc.RPCAPI):
         return versions[-1]
 
     def _get_cctxt(self, host, version):
-        new_host = utils.get_volume_rpc_host(host)
-        return self.client.prepare(server=new_host, version=version)
+        new_host = rpc.get_rpc_host(host, self.BINARY)
+        new_topic = rpc.get_rpc_topic(host, self.BINARY, self.TOPIC)
+        if new_topic == self.TOPIC:
+            cctxt = self.client.prepare(server=new_host, version=version)
+        else:
+            cctxt = self.client.prepare(server=new_host, topic=new_topic,
+                                        version=version)
+        return cctxt
 
     def create_consistencygroup(self, ctxt, group, host):
         cctxt = self._get_cctxt(host, '2.0')
@@ -227,8 +234,17 @@ class VolumeAPI(rpc.RPCAPI):
         cctxt.cast(ctxt, 'remove_export', volume_id=volume['id'])
 
     def publish_service_capabilities(self, ctxt):
-        cctxt = self.client.prepare(fanout=True, version='2.0')
-        cctxt.cast(ctxt, 'publish_service_capabilities')
+        version = '2.0'
+        method = 'publish_service_capabilities'
+        if rpc.is_distributed_messenger() and CONF.enabled_backends:
+            for backend in CONF.enabled_backends:
+                new_topic = "%s@%s" % (self.TOPIC, backend)
+                cctxt = self.client.prepare(fanout=True, version=version,
+                                            topic=new_topic)
+                cctxt.cast(ctxt, method)
+        else:
+            cctxt = self.client.prepare(fanout=True, version=version)
+            cctxt.cast(ctxt, method)
 
     def accept_transfer(self, ctxt, volume, new_user, new_project):
         cctxt = self._get_cctxt(volume['host'], '2.0')

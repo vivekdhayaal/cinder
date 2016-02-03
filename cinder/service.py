@@ -229,10 +229,11 @@ class Service(service.Service):
 
         self.manager.init_host(added_to_cluster=self.added_to_cluster)
 
-        LOG.debug("Creating RPC server for service %s", self.topic)
+        rpc_topic = rpc.get_rpc_topic(self.host, self.binary, self.topic)
+        LOG.debug("Creating RPC server for service %s", rpc_topic)
 
         ctxt = context.get_admin_context()
-        target = messaging.Target(topic=self.topic, server=self.host)
+        target = messaging.Target(topic=rpc_topic, server=self.host)
         endpoints = [self.manager]
         endpoints.extend(self.manager.additional_endpoints)
         obj_version_cap = objects.Service.get_minimum_obj_version(ctxt)

@@ -20,6 +20,10 @@ __all__ = [
     'clear_extra_exmods',
     'get_allowed_exmods',
     'RequestContextSerializer',
+    'extract_from_host',
+    'is_distributed_messenger',
+    'get_rpc_host',
+    'get_rpc_topic',
     'get_client',
     'get_server',
     'get_notifier',
@@ -33,6 +37,7 @@ from oslo_serialization import jsonutils
 from oslo_utils import importutils
 profiler = importutils.try_import('osprofiler.profiler')
 
+from cinder.common import constants
 import cinder.context
 import cinder.exception
 from cinder.i18n import _LE, _LI
@@ -61,6 +66,9 @@ TRANSPORT_ALIASES = {
     'cinder.rpc.impl_qpid': 'qpid',
     'cinder.rpc.impl_zmq': 'zmq',
 }
+
+POOL_SEP = '#'
+BACKEND_SEP = '@'
 
 
 def init(conf):
@@ -149,6 +157,94 @@ class RequestContextSerializer(messaging.Serializer):
                 profiler.init(**trace_info)
 
         return cinder.context.RequestContext.from_dict(context)
+
+
+DEFAULT_POOL_NAME = '_pool0'
+
+
+def extract_from_host(host, level='backend', default_pool_name=False):
+    """Extract Host, Backend or Pool information from host string.
+
+    :param host: String for host, which could include host@backend#pool info
+    :param level: Indicate which level of information should be extracted
+                  from host string. Level can be 'host', 'backend' or 'pool',
+                  default value is 'backend'
+    :param default_pool_name: this flag specify what to do if level == 'pool'
+                              and there is no 'pool' info encoded in host
+                              string.  default_pool_name=True will return
+                              DEFAULT_POOL_NAME, otherwise we return None.
+                              Default value of this parameter is False.
+    :return: expected level of information
+
+    For example:
+        host = 'HostA@BackendB#PoolC'
+        ret = extract_host(host, 'host')
+        # ret is 'HostA'
+        ret = extract_host(host, 'backend')
+        # ret is 'HostA@BackendB'
+        ret = extract_host(host, 'pool')
+        # ret is 'PoolC'
+
+        host = 'HostX@BackendY'
+        ret = extract_host(host, 'pool')
+        # ret is None
+        ret = extract_host(host, 'pool', True)
+        # ret is '_pool0'
+    """
+    if level == 'host':
+        # make sure pool is not included
+        hst = host.split(POOL_SEP)[0]
+        return hst.split(BACKEND_SEP)[0]
+    elif level == 'backend':
+        return host.split(POOL_SEP)[0]
+    elif level == 'pool':
+        lst = host.split(POOL_SEP)
+        if len(lst) == 2:
+            return lst[1]
+        elif default_pool_name is True:
+            return DEFAULT_POOL_NAME
+        else:
+            return None
+
+
+DISTRIBUTED_MESSENGERS = ['zmq']
+
+
+def is_distributed_messenger():
+    """Check if a distributed messaging system is in use"""
+    # ZeroMQ is a distributed messaging system
+    return (CONF.rpc_backend and
+            CONF.rpc_backend in DISTRIBUTED_MESSENGERS)
+
+
+def get_rpc_host(host, binary):
+    """Returns RPC host.
+
+    Returns the hostname used for RPC.
+    """
+    if is_distributed_messenger() and binary == constants.VOLUME_BINARY:
+        # Distributed messenger(ZeroMQ) requires the hostname.
+        # So, extract and return that.
+        return extract_from_host(host, 'host')
+    return extract_from_host(host)
+
+
+def get_rpc_topic(host, binary, topic):
+    """Returns RPC topic.
+
+    Returns the topic used for RPC.
+    """
+    if is_distributed_messenger() and binary == constants.VOLUME_BINARY:
+        # Distributed messenger(ZeroMQ) uses the hostname for connections.
+        # So, distinguish multiple backends by appending backend to topic
+        try:
+            backend = host.split(POOL_SEP)[0].split(BACKEND_SEP)[1]
+            topic = BACKEND_SEP.join([topic, backend])
+        except IndexError:
+            # BACKEND_SEP isn't part of host string so it should be
+            # single backend config so return topic as is.
+            pass
+    return topic
 
 
 def get_client(target, version_cap=None, serializer=None):

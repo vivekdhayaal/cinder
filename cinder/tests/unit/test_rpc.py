@@ -14,6 +14,7 @@
 
 import mock
 
+from cinder.common import constants
 from cinder.objects import base
 from cinder import rpc
 from cinder import test
@@ -83,3 +84,19 @@ class RPCAPITestCase(test.TestCase):
 
         self.assertFalse(get_min_obj.called)
         self.assertFalse(get_min_rpc.called)
+
+
+class RPCTestCase(test.TestCase):
+    def test_get_rpc_host(self):
+        host = 'Host@backend'
+        binary = constants.VOLUME_BINARY
+        # default level is 'backend'
+        # check if host with backend is returned
+        self.assertEqual(rpc.extract_from_host(host),
+                         rpc.get_rpc_host(host, binary))
+
+    def test_get_rpc_topic(self):
+        host = 'Host@backend'
+        binary = constants.VOLUME_BINARY
+        topic = constants.VOLUME_TOPIC
+        self.assertEqual(topic, rpc.get_rpc_topic(host, binary, topic))
