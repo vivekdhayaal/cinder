@@ -502,6 +502,28 @@ def extract_host(host, level='backend', default_pool_name=False):
             return None
 
 
+def get_volume_rpc_host(host):
+    if only_hostname_required():
+        # ZeroMQ RPC driver requires only the hostname.
+        # So, return just that.
+        return extract_host(host, 'host')
+    return extract_host(host)
+
+
+def get_volume_rpc_topic(host, topic=None):
+    # In AMQP, backend was appended to hostname which helped distinguish
+    # multiple backends. This didn't cause any problems as the node
+    # hostname wasn't used; rather the AMQP broker hostname was used.
+    if only_hostname_required():
+        # ZeroMQ RPC driver requires only the hostname.
+        # So, distinguish multilple backends by appending backend to topic
+        pool_sep = '#'
+        backend_sep = '@'
+        backend = host.split(pool_sep)[0].split(backend_sep)[1]
+        topic = backend_sep.join([topic, backend])
+    return topic
+
+
 def append_host(host, pool):
     """Encode pool into host info."""
     if not host or not pool:

@@ -21,7 +21,10 @@ import os
 
 import eventlet
 
+import oslo_messaging as messaging
+
 from cinder import objects
+from cinder.volume import utils as volume_utils
 
 if os.name == 'nt':
     # eventlet monkey patching the os module causes subprocess.Popen to fail
@@ -54,6 +57,7 @@ host_opt = cfg.StrOpt('backend_host', help='Backend override of host value.',
                       deprecated_opts=[deprecated_host_opt])
 cfg.CONF.register_cli_opt(host_opt)
 CONF = cfg.CONF
+BINARY = 'cinder-volume'
 
 
 def main():
@@ -68,15 +72,18 @@ def main():
             CONF.register_opt(host_opt, group=backend)
             backend_host = getattr(CONF, backend).backend_host
             host = "%s@%s" % (backend_host or CONF.host, backend)
+            topic = volume_utils.get_volume_rpc_topic(host) or BINARY
+            target = messaging.Target(server=host, topic=topic)
             server = service.Service.create(host=host,
+                                            target=target,
                                             service_name=backend,
-                                            binary='cinder-volume')
+                                            binary=BINARY)
             # Dispose of the whole DB connection pool here before
             # starting another process.  Otherwise we run into cases where
             # child processes share DB connections which results in errors.
             session.dispose_engine()
             launcher.launch_service(server)
     else:
-        server = service.Service.create(binary='cinder-volume')
+        server = service.Service.create(binary=BINARY)
         launcher.launch_service(server)
     launcher.wait()

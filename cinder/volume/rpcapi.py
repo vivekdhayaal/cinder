@@ -76,14 +76,19 @@ class VolumeAPI(object):
         self.client = rpc.get_client(target, '1.23', serializer=serializer)
 
     def _get_cctxt(self, host, version=None):
-        if utils.only_hostname_required():
-            new_host = utils.extract_host(host, 'host')
-        else:
-            new_host = utils.extract_host(host)
+        new_host = utils.get_volume_rpc_host(host)
+        new_topic = utils.get_volume_rpc_topic(host)
         if version:
-            cctxt = self.client.prepare(server=new_host, version=version)
+            if new_topic:
+                cctxt = self.client.prepare(server=new_host, topic=new_topic,
+                                            version=version)
+            else:
+                cctxt = self.client.prepare(server=new_host, version=version)
         else:
-            cctxt = self.client.prepare(server=new_host)
+            if new_topic:
+                cctxt = self.client.prepare(server=new_host, topic=new_topic)
+            else:
+                cctxt = self.client.prepare(server=new_host)
         return cctxt
 
     def create_consistencygroup(self, ctxt, group, host):

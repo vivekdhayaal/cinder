@@ -632,6 +632,41 @@ class VolumeUtilsTestCase(test.TestCase):
         self.assertEqual(
             volume_utils.extract_host(host, 'pool', True), 'Pool')
 
+    @mock.patch('cinder.volume.utils.CONF')
+    def test_only_hostname_required(self, mock_conf):
+        mock_conf.rpc_backend = 'zmq'
+        self.assertTrue(volume_utils.only_hostname_required())
+        mock_conf.rpc_backend = 'rabbit'
+        self.assertFalse(volume_utils.only_hostname_required())
+
+    @mock.patch('cinder.volume.utils.CONF')
+    def test_get_volume_rpc_host(self, mock_conf):
+        host = 'Host@backend'
+        mock_conf.rpc_backend = 'zmq'
+        # expected_host = 'Host'
+        expected_host = volume_utils.extract_host(host, 'host')
+        self.assertEqual(expected_host,
+                         volume_utils.get_volume_rpc_host(host))
+        mock_conf.rpc_backend = 'rabbit'
+        # default level is 'backend'
+        # check if host with backend is returned
+        # expected_host = 'Host@backend'
+        expected_host = volume_utils.extract_host(host)
+        self.assertEqual(expected_host,
+                         volume_utils.get_volume_rpc_host(host))
+
+    @mock.patch('cinder.volume.utils.CONF')
+    def test_get_volume_rpc_topic(self, mock_conf):
+        host = 'Host@backend'
+        mock_conf.rpc_backend = 'zmq'
+        expected_topic = 'cinder-volume@backend'
+        self.assertEqual(expected_topic,
+                         volume_utils.get_volume_rpc_topic(host))
+        mock_conf.rpc_backend = 'rabbit'
+        expected_topic = 'cinder-volume'
+        self.assertEqual(expected_topic,
+                         volume_utils.get_volume_rpc_topic(host))
+
     def test_append_host(self):
         host = 'Host'
         pool = 'Pool'

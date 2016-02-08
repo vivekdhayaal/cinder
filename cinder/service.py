@@ -109,7 +109,8 @@ class Service(service.Service):
     it state to the database services table.
     """
 
-    def __init__(self, host, binary, topic, manager, report_interval=None,
+    def __init__(self, host, binary, topic, manager, target=None,
+                 report_interval=None,
                  periodic_interval=None, periodic_fuzzy_delay=None,
                  service_name=None, *args, **kwargs):
         super(Service, self).__init__()
@@ -120,6 +121,9 @@ class Service(service.Service):
         self.host = host
         self.binary = binary
         self.topic = topic
+        if not target:
+            target = messaging.Target(topic=self.topic, server=self.host)
+        self.target = target
         self.manager_class_name = manager
         manager_class = importutils.import_class(self.manager_class_name)
         manager_class = profiler.trace_cls("rpc")(manager_class)
@@ -153,11 +157,10 @@ class Service(service.Service):
 
         LOG.debug("Creating RPC server for service %s", self.topic)
 
-        target = messaging.Target(topic=self.topic, server=self.host)
         endpoints = [self.manager]
         endpoints.extend(self.manager.additional_endpoints)
         serializer = objects_base.CinderObjectSerializer()
-        self.rpcserver = rpc.get_server(target, endpoints, serializer)
+        self.rpcserver = rpc.get_server(self.target, endpoints, serializer)
         self.rpcserver.start()
 
         self.manager.init_host_with_rpc()
@@ -214,7 +217,7 @@ class Service(service.Service):
 
     @classmethod
     def create(cls, host=None, binary=None, topic=None, manager=None,
-               report_interval=None, periodic_interval=None,
+               target=None, report_interval=None, periodic_interval=None,
                periodic_fuzzy_delay=None, service_name=None):
         """Instantiates class and passes back application object.
 
@@ -242,7 +245,7 @@ class Service(service.Service):
             periodic_interval = CONF.periodic_interval
         if periodic_fuzzy_delay is None:
             periodic_fuzzy_delay = CONF.periodic_fuzzy_delay
-        service_obj = cls(host, binary, topic, manager,
+        service_obj = cls(host, binary, topic, manager, target,
                           report_interval=report_interval,
                           periodic_interval=periodic_interval,
                           periodic_fuzzy_delay=periodic_fuzzy_delay,
