@@ -25,11 +25,20 @@ CONF = cfg.CONF
 
 _ENFORCER = None
 
+class DisabledEnforcer():
+    def enforce(self, *args, **kwargs):
+        """Disabled policy engine in Cinder
+
+        Policy enforcement is no more done at cinder for SBS.
+        Its now done by IAM in keystone.
+        So, this method is just a  pass-through.
+        """
+        return True
 
 def init():
     global _ENFORCER
     if not _ENFORCER:
-        _ENFORCER = policy.Enforcer()
+        _ENFORCER = DisabledEnforcer()
 
 
 def enforce_action(context, action):
