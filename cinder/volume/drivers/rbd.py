@@ -21,7 +21,7 @@ import os
 import tempfile
 import urllib
 
-from eventlet import tpool
+
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import encodeutils
@@ -40,7 +40,6 @@ try:
 except ImportError:
     rados = None
     rbd = None
-
 
 LOG = logging.getLogger(__name__)
 
@@ -80,12 +79,19 @@ rbd_opts = [
     cfg.IntOpt('rados_connect_timeout', default=-1,
                help=_('Timeout value (in seconds) used when connecting to '
                       'ceph cluster. If value < 0, no timeout is set and '
-                      'default librados value is used.'))
+                      'default librados value is used.')),
+    cfg.IntOpt('rbd_tpool_size', default=20,
+               help=_('thread pool size'))
+
 ]
 
 CONF = cfg.CONF
 CONF.register_opts(rbd_opts)
 
+if not os.environ.get('EVENTLET_THREADPOOL_SIZE'):
+    os.environ['EVENTLET_THREADPOOL_SIZE'] = CONF.rbd_tpool_size
+
+from eventlet import tpool
 
 class RBDImageMetadata(object):
     """RBD image metadata to be used with RBDImageIOWrapper."""
