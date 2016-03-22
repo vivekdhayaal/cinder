@@ -19,6 +19,8 @@
 SQLAlchemy models for cinder data.
 """
 
+from datetime import datetime
+
 from oslo_config import cfg
 from oslo_db.sqlalchemy import models
 from oslo_utils import timeutils
@@ -112,6 +114,8 @@ class Volume(BASE, CinderBase):
     __tablename__ = 'volumes'
     id = Column(String(36), primary_key=True)
     _name_id = Column(String(36))  # Don't access/modify this directly!
+    created_at = Column(DateTime, default=lambda: datetime.now())
+    updated_at = Column(DateTime, onupdate=lambda: datetime.now())
 
     @property
     def name_id(self):
@@ -505,6 +509,8 @@ class Backup(BASE, CinderBase):
     """Represents a backup of a volume to Swift."""
     __tablename__ = 'backups'
     id = Column(String(36), primary_key=True)
+    created_at = Column(DateTime, default=lambda: datetime.now())
+    updated_at = Column(DateTime, onupdate=lambda: datetime.now())
 
     @property
     def name(self):
