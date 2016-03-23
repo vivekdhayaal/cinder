@@ -1145,7 +1145,7 @@ def finish_volume_migration(context, src_vol_id, dest_vol_id):
 @_retry_on_deadlock
 def volume_destroy(context, volume_id):
     session = get_session()
-    now = timeutils.utcnow()
+    now = dt.datetime.now()
     with session.begin():
         model_query(context, models.Volume, session=session).\
             filter_by(id=volume_id).\
@@ -3270,7 +3270,7 @@ def backup_destroy(context, backup_id):
         filter_by(id=backup_id).\
         update({'status': 'deleted',
                 'deleted': True,
-                'deleted_at': timeutils.utcnow(),
+                'deleted_at': dt.datetime.now(),
                 'updated_at': literal_column('updated_at')})
 
 
