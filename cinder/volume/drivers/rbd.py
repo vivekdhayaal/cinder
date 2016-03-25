@@ -89,7 +89,7 @@ CONF = cfg.CONF
 CONF.register_opts(rbd_opts)
 
 if not os.environ.get('EVENTLET_THREADPOOL_SIZE'):
-    os.environ['EVENTLET_THREADPOOL_SIZE'] = CONF.rbd_tpool_size
+    os.environ['EVENTLET_THREADPOOL_SIZE'] = str(CONF.rbd_tpool_size)
 
 from eventlet import tpool
 
