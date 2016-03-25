@@ -17,3 +17,4 @@
 
 
 CINDER_VOLUME = "cinder-volume"
+CINDER_BACKUP = "cinder-backup"

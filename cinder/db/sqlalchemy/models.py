@@ -72,6 +72,14 @@ class Service(BASE, CinderBase):
     modified_at = Column(DateTime)
 
 
+class ServicesSequences(BASE, CinderBase):
+    """Represents the sequence in which LB happens between services."""
+
+    __tablename__ = 'services_sequences'
+    service = Column(String(255), primary_key=True)
+    index = Column(Integer, nullable=False, default=0)
+
+
 class ConsistencyGroup(BASE, CinderBase):
     """Represents a consistencygroup."""
     __tablename__ = 'consistencygroups'

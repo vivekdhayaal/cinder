@@ -22,6 +22,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 import oslo_messaging as messaging
 
+from cinder.common import round_robin_scheduler as rrs
 from cinder import rpc
 
 
@@ -47,7 +48,7 @@ class BackupAPI(object):
         self.client = rpc.get_client(target, '1.0')
 
     def _get_cctxt(self):
-        return self.client.prepare()
+        return self.client.prepare(server=rrs.get_next_backup_host())
 
     def create_backup(self, ctxt, host, backup_id, volume_id, orig_status):
         LOG.debug("create_backup in rpcapi backup_id %s", backup_id)

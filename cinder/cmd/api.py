@@ -35,6 +35,7 @@ i18n.enable_lazy()
 
 # Need to register global_opts
 from cinder.common import config  # noqa
+from cinder.common import round_robin_scheduler as rrs
 from cinder import rpc
 from cinder import service
 from cinder import utils
@@ -52,6 +53,7 @@ def main():
     utils.monkey_patch()
 
     rpc.init(CONF)
+    rrs.init()
     launcher = service.process_launcher()
     server = service.WSGIService('osapi_volume')
     launcher.launch_service(server, workers=server.workers)

@@ -47,6 +47,7 @@ from sqlalchemy.sql.expression import true
 from sqlalchemy.sql import func
 
 from cinder.common import sqlalchemyutils
+from cinder import db
 from cinder.db.sqlalchemy import models
 from cinder import exception
 from cinder.i18n import _, _LW, _LE, _LI
@@ -442,6 +443,42 @@ def service_update(context, service_id, values):
             service_ref['updated_at'] = literal_column('updated_at')
         service_ref.update(values)
         return service_ref
+
+
+###################
+
+
+@require_admin_context
+def service_sequence_create(context, values):
+    service_ref = models.ServicesSequences()
+    service_ref.update(values)
+    session = get_session()
+    with session.begin():
+        service_ref.save(session)
+        return service_ref
+
+
+@require_admin_context
+def service_sequence_update(context, service, values):
+    session = get_session()
+    with session.begin():
+        service_ref = service_sequence_get(context, service, session=session)
+        service_ref.update(values)
+        return service_ref
+
+
+@require_admin_context
+def service_sequence_get(context, service, session=None):
+    result = model_query(
+        context,
+        models.ServicesSequences,
+        session=session).\
+        filter_by(service=service).\
+        first()
+    if not result:
+        raise exception.ServiceNotFound(service_id=service)
+
+    return result
 
 
 ###################
@@ -3683,3 +3720,31 @@ def driver_initiator_data_get(context, initiator, namespace):
             filter_by(initiator=initiator).\
             filter_by(namespace=namespace).\
             all()
+
+
+def condition_db_filter(model, field, value):
+    """Create matching filter."""
+    orm_field = getattr(model, field)
+    return orm_field == value
+
+
+@require_context
+def conditional_update(context, model, values, expected_values, filters=(),
+                       include_deleted='no', project_only=False):
+    """Compare-and-swap conditional update SQLAlchemy implementation."""
+    # Provided filters will become part of the where clause
+    where_conds = list(filters)
+
+    # Build where conditions with operators ==, !=, NOT IN and IN
+    for field, condition in expected_values.items():
+        if not isinstance(condition, db.Condition):
+            condition = db.Condition(condition, field)
+        where_conds.append(condition.get_filter(model, field))
+
+    query = model_query(context, model, read_deleted=include_deleted,
+                        project_only=project_only)
+
+    # Return True if we were able to change any DB entry, False otherwise
+    result = query.filter(*where_conds).update(values,
+                                               synchronize_session=False)
+    return 0 != result

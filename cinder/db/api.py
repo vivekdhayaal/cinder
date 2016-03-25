@@ -133,6 +133,28 @@ def service_update(context, service_id, values):
 ###################
 
 
+def service_sequence_create(context, values):
+    """Create a service sequence from the values dictionary."""
+    return IMPL.service_sequence_create(context, values)
+
+
+def service_sequence_update(context, service, values):
+    """Update a service sequence from the values dictionary.
+
+    Raises NotFound if service does not exist.
+
+    """
+    return IMPL.service_sequence_update(context, service, values)
+
+
+def service_sequence_get(context, service):
+    """Get a service sequence or raise if it does not exist."""
+    return IMPL.service_sequence_get(context, service)
+
+
+###############
+
+
 def iscsi_target_count_by_host(context, host):
     """Return count of export devices."""
     return IMPL.iscsi_target_count_by_host(context, host)
@@ -985,3 +1007,37 @@ def driver_initiator_data_update(context, initiator, namespace, updates):
 def driver_initiator_data_get(context, initiator, namespace):
     """Query for an DriverPrivateData that has the specified key"""
     return IMPL.driver_initiator_data_get(context, initiator, namespace)
+
+
+class Condition(object):
+    """Class for normal condition values for conditional_update."""
+    def __init__(self, value, field=None):
+        self.value = value
+        # Field is optional and can be passed when getting the filter
+        self.field = field
+
+    def get_filter(self, model, field=None):
+        return IMPL.condition_db_filter(model, self._get_field(field),
+                                        self.value)
+
+    def _get_field(self, field=None):
+        # We must have a defined field on initialization or when called
+        field = field or self.field
+        if not field:
+            raise ValueError(_('Condition has no field.'))
+        return field
+
+
+def conditional_update(context, model, values, expected_values, filters=(),
+                       include_deleted='no', project_only=False):
+    """Compare-and-swap conditional update.
+
+       Update will only occur in the DB if conditions are met.
+
+       :param values: Dictionary of key-values to update in the DB.
+       :param expected_values: Dictionary of conditions that must be met
+                               for the update to be executed.
+       :returns number of db rows that were updated
+    """
+    return IMPL.conditional_update(context, model, values, expected_values,
+                                   filters, include_deleted, project_only)
