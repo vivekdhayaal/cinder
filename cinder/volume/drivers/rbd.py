@@ -667,11 +667,10 @@ class RBDDriver(driver.VolumeDriver):
             parent = None
 
             # Ensure any backup snapshots are deleted
-            self._delete_backup_snaps(rbd_image, volume_name, context)
-
             # If the volume has non-clone snapshots this delete is expected to
             # raise VolumeIsBusy so do so straight away.
             try:
+                self._delete_backup_snaps(rbd_image, volume_name, context)
                 snaps = rbd_image.list_snaps()
                 for snap in snaps:
                     if snap['name'].endswith('.clone_snap'):
