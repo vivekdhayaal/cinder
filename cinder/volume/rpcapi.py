@@ -20,6 +20,7 @@ from oslo_config import cfg
 import oslo_messaging as messaging
 from oslo_serialization import jsonutils
 
+from cinder.common.host_manager import get_active_volume_host
 from cinder.objects import base as objects_base
 from cinder import rpc
 from cinder.volume import utils
@@ -75,7 +76,10 @@ class VolumeAPI(object):
         serializer = objects_base.CinderObjectSerializer()
         self.client = rpc.get_client(target, '1.23', serializer=serializer)
 
-    def _get_cctxt(self, host, version=None):
+    def _get_cctxt(self, host, version=None, isCreateVolume=False):
+        if not isCreateVolume:
+            # for volume creation we'll use the legacy scheduler logic
+            host = get_active_volume_host()
         if utils.only_hostname_required():
             new_host = utils.extract_host(host, 'host')
         else:
@@ -132,7 +136,7 @@ class VolumeAPI(object):
                       consistencygroup_id=None,
                       cgsnapshot_id=None):
 
-        cctxt = self._get_cctxt(host, '1.4')
+        cctxt = self._get_cctxt(host, '1.4', True)
         request_spec_p = jsonutils.to_primitive(request_spec)
         cctxt.cast(ctxt, 'create_volume',
                    volume_id=volume['id'],
