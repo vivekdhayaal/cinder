@@ -977,7 +977,6 @@ class Resource(wsgi.Application):
         #            function.  If we try to audit __call__(), we can
         #            run into troubles due to the @webob.dec.wsgify()
         #            decorator.
-        responseCode = 200
         success = 0
         error = 0
         fault = 0
@@ -991,7 +990,6 @@ class Resource(wsgi.Application):
             try:
                 if e.code < 500 and e.code > 399:
                     error = 1
-                responseCode = e.code
             except AttributeError:
                 LOG.warn("Above Exception does not have a code")
             raise e
@@ -999,7 +997,6 @@ class Resource(wsgi.Application):
             metrics.add_count("fault", fault)
             metrics.add_count("error", error)
             metrics.add_count("success", success)
-            metrics.add_property("ResponseCode", responseCode)
             metricUtil.closeMetrics(request)
         # As of now the service logs contain all the request information and the latencies of the call.
         # Metrics object will contain latency automatically (calculated between initializationa and closing
