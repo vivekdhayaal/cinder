@@ -27,7 +27,7 @@ from oslo_utils import excutils
 import six
 import webob
 
-from cinder.api.metricutil import MetricUtil 
+from cinder.api.metricutil import MetricUtil
 from cinder import exception
 from cinder import i18n
 from cinder.i18n import _, _LE, _LI
@@ -959,7 +959,7 @@ class Resource(wsgi.Application):
     @webob.dec.wsgify(RequestClass=Request)
     def __call__(self, request):
         """WSGI method that controls (de)serialization and method dispatch."""
-        
+
         LOG.info(_LI("%(method)s %(url)s"),
                  {"method": request.method,
                   "url": request.url})
@@ -977,37 +977,35 @@ class Resource(wsgi.Application):
         #            function.  If we try to audit __call__(), we can
         #            run into troubles due to the @webob.dec.wsgify()
         #            decorator.
-        responseCode = 200
         success = 0
         error = 0
         fault = 0
         try:
             response = self._process_stack(request, action, action_args,
                                    content_type, body, accept)
-            success = 1 
+            success = 1
         except Exception as e:
-            LOG.info("Error")
-            LOG.info(e.__dict__)
-            if e.code > 500:
-                fault = 1
-            else: 
-                error = 1
-            responseCode = e.code
+            LOG.exception('Exception in cinderAPI: %s', e)
+            fault = 1
+            try:
+                if e.code < 500 and e.code > 399:
+                    error = 1
+            except AttributeError:
+                LOG.warn("Above Exception does not have a code")
             raise e
         finally:
             metrics.add_count("fault", fault)
             metrics.add_count("error", error)
             metrics.add_count("success", success)
-            metrics.add_property("ResponseCode", responseCode)
             metricUtil.closeMetrics(request)
         # As of now the service logs contain all the request information and the latencies of the call.
         # Metrics object will contain latency automatically (calculated between initializationa and closing
         # TODO. 1) Add timer count for each methods
         #       2) Add metric for failures, success error and faults by parsing the response
         return response
-    
-    
-    
+
+
+
     def _process_stack(self, request, action, action_args,
                        content_type, body, accept):
         """Implement the processing stack."""
@@ -1019,7 +1017,7 @@ class Resource(wsgi.Application):
             # Removing this because we are not sure if this is going to fetch the method name
             metrics = MetricUtil().fetch_thread_local_metrics()
             metrics.add_property("OperationName", meth.__name__)
-                
+
             # Add method name to the service logs. For example CreateVolume, DescribeVolume etc.
         except (AttributeError, TypeError):
             return Fault(webob.exc.HTTPNotFound())
