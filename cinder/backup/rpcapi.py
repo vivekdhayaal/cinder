@@ -23,7 +23,7 @@ from oslo_log import log as logging
 import oslo_messaging as messaging
 
 from cinder import rpc
-
+from cinder.api.metricutil import ReportMetrics
 
 CONF = cfg.CONF
 
@@ -49,18 +49,21 @@ class BackupAPI(object):
     def _get_cctxt(self):
         return self.client.prepare()
 
+    @ReportMetrics("backup-rpcapi-create-backup")
     def create_backup(self, ctxt, host, backup_id, volume_id, orig_status):
         LOG.debug("create_backup in rpcapi backup_id %s", backup_id)
         cctxt = self._get_cctxt()
         cctxt.cast(ctxt, 'create_backup', backup_id=backup_id,
                    orig_status=orig_status)
 
+    @ReportMetrics("backup-rpcapi-restore-backup")
     def restore_backup(self, ctxt, host, backup_id, volume_id):
         LOG.debug("restore_backup in rpcapi backup_id %s", backup_id)
         cctxt = self._get_cctxt()
         cctxt.cast(ctxt, 'restore_backup', backup_id=backup_id,
                    volume_id=volume_id)
 
+    @ReportMetrics("backup-rpcapi-delete-backup")
     def delete_backup(self, ctxt, host, backup_id):
         LOG.debug("delete_backup  rpcapi backup_id %s", backup_id)
         cctxt = self._get_cctxt()

@@ -37,7 +37,7 @@ from cinder import quota
 from cinder import rpc
 from cinder.scheduler.flows import create_volume
 from cinder.volume import rpcapi as volume_rpcapi
-
+from cinder.api.metricutil import CinderSchedulerMetricsWrapper
 
 scheduler_driver_opt = cfg.StrOpt('scheduler_driver',
                                   default='cinder.scheduler.filter_scheduler.'
@@ -126,6 +126,7 @@ class SchedulerManager(manager.Manager):
                 db.consistencygroup_update(context, group_id,
                                            {'status': 'error'})
 
+    @CinderSchedulerMetricsWrapper("cinder-scheduler-volume-create")
     def create_volume(self, context, topic, volume_id, snapshot_id=None,
                       image_id=None, request_spec=None,
                       filter_properties=None):

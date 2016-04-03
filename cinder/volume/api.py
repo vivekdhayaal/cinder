@@ -49,7 +49,7 @@ from cinder.volume import qos_specs
 from cinder.volume import rpcapi as volume_rpcapi
 from cinder.volume import utils as volume_utils
 from cinder.volume import volume_types
-
+from cinder.api.metricutil import ReportMetrics
 
 volume_host_opt = cfg.BoolOpt('snapshot_same_host',
                               default=True,
@@ -157,6 +157,7 @@ class API(base.Base):
             azs = self.availability_zones
         return tuple(azs)
 
+    @ReportMetrics("volume-api-create")
     def create(self, context, size, name, description, snapshot=None,
                image_id=None, volume_type=None, metadata=None,
                availability_zone=None, source_volume=None,
@@ -266,6 +267,7 @@ class API(base.Base):
             flow_engine.run()
             return flow_engine.storage.fetch('volume')
 
+    @ReportMetrics("volume-api-delete")
     @wrap_check_policy
     def delete(self, context, volume, force=False, unmanage_only=False):
         if context.is_admin and context.project_id != volume['project_id']:
@@ -358,6 +360,7 @@ class API(base.Base):
     def update(self, context, volume, fields):
         self.db.volume_update(context, volume['id'], fields)
 
+    @ReportMetrics("volume-api-get")
     def get(self, context, volume_id, viewable_admin_meta=False):
         if viewable_admin_meta:
             ctxt = context.elevated()
@@ -393,6 +396,7 @@ class API(base.Base):
 
         return b
 
+    @ReportMetrics("volume-api-getall")
     def get_all(self, context, marker=None, limit=None, sort_keys=None,
                 sort_dirs=None, filters=None, viewable_admin_meta=False):
         check_policy(context, 'get_all')
@@ -539,6 +543,7 @@ class API(base.Base):
         if volume['status'] == "detaching":
             self.update(context, volume, {"status": "in-use"})
 
+    @ReportMetrics("volume-api-attach")
     @wrap_check_policy
     def attach(self, context, volume, instance_uuid, host_name,
                mountpoint, mode):
@@ -561,6 +566,7 @@ class API(base.Base):
                                                 mountpoint,
                                                 mode)
 
+    @ReportMetrics("volume-api-detach")
     @wrap_check_policy
     def detach(self, context, volume, attachment_id):
         return self.volume_rpcapi.detach_volume(context, volume,

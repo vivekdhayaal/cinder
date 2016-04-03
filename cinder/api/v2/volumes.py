@@ -242,16 +242,12 @@ class VolumeController(wsgi.Controller):
             except (ValueError, SyntaxError):
                 LOG.debug('Could not evaluate value %s, assuming string', v)
         
-        start_time = time()
         volumes = self.volume_api.get_all(context, marker, limit,
                                           sort_keys=sort_keys,
                                           sort_dirs=sort_dirs,
                                           filters=filters,
                                           viewable_admin_meta=True)
-        end_time = time()
-        time_in_millis = int((end_time - start_time)*1000)
-        metrics = ThreadLocalMetrics.get()
-        metrics.add_time("mysql-get-all-volumes", time_in_millis, Unit.MILLIS)
+        #metrics.add_time("mysql-get-all-volumes", time_in_millis, Unit.MILLIS)
         volumes = [dict(vol.iteritems()) for vol in volumes]
 
         for volume in volumes:

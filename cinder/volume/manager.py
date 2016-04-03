@@ -68,6 +68,7 @@ from cinder.volume.flows.manager import manage_existing
 from cinder.volume import rpcapi as volume_rpcapi
 from cinder.volume import utils as vol_utils
 from cinder.volume import volume_types
+from cinder.api.metricutil import CinderVolumeMetricsWrapper
 
 from eventlet import greenpool
 
@@ -400,6 +401,7 @@ class VolumeManager(manager.SchedulerDependentManager):
 
             self.add_periodic_task(run_replication_task)
 
+    @CinderVolumeMetricsWrapper(operation_name="cinder-volume-create")
     def create_volume(self, context, volume_id, request_spec=None,
                       filter_properties=None, allow_reschedule=True,
                       snapshot_id=None, image_id=None, source_volid=None,
@@ -487,6 +489,7 @@ class VolumeManager(manager.SchedulerDependentManager):
 
         return vol_ref['id']
 
+    @CinderVolumeMetricsWrapper(operation_name="cinder-volume-delete")
     @locked_volume_operation
     def delete_volume(self, context, volume_id, unmanage_only=False):
         """Deletes and unexports volume.
@@ -751,6 +754,7 @@ class VolumeManager(manager.SchedulerDependentManager):
             QUOTAS.commit(context, reservations, project_id=project_id)
         return True
 
+    @CinderVolumeMetricsWrapper(operation_name="cinder-volume-attach")
     def attach_volume(self, context, volume_id, instance_uuid, host_name,
                       mountpoint, mode):
         """Updates db to show volume is attached."""
@@ -762,7 +766,7 @@ class VolumeManager(manager.SchedulerDependentManager):
                 context.elevated(), volume_id)
             if volume['status'] == 'attaching':
                 if (volume_metadata.get('attached_mode') and
-                   volume_metadata.get('attached_mode') != mode):
+                    volume_metadata.get('attached_mode') != mode):
                     msg = _("being attached by different mode")
                     raise exception.InvalidVolume(reason=msg)
 
@@ -842,6 +846,7 @@ class VolumeManager(manager.SchedulerDependentManager):
             return self.db.volume_attachment_get(context, attachment_id)
         return do_attach()
 
+    @CinderVolumeMetricsWrapper(operation_name="cinder-volume-detach")
     @locked_detach_operation
     def detach_volume(self, context, volume_id, attachment_id=None):
         """Updates db to show volume is detached."""
@@ -1031,6 +1036,8 @@ class VolumeManager(manager.SchedulerDependentManager):
                                'backend': namespace})
                 raise
 
+    # TODO: Souvik: Figure out the use case. Dont know when it is called
+    @CinderVolumeMetricsWrapper(operation_name="cinder-initialize-connection")
     def initialize_connection(self, context, volume_id, connector):
         """Prepare volume for connection from host represented by connector.
 
@@ -1139,7 +1146,6 @@ class VolumeManager(manager.SchedulerDependentManager):
             # front-end, or both front-end and back-end.
             if qos and qos.get('consumer') in ['front-end', 'both']:
                 specs = qos.get('specs')
-
         qos_spec = dict(qos_specs=specs)
         conn_info['data'].update(qos_spec)
 
@@ -1157,6 +1163,8 @@ class VolumeManager(manager.SchedulerDependentManager):
 
         return conn_info
 
+    # TODO: Souvik: Figure out the use case. Dont know when it is called
+    @CinderVolumeMetricsWrapper(operation_name="cinder-terminate-connection")
     def terminate_connection(self, context, volume_id, connector, force=False):
         """Cleanup connection from host represented by connector.
 

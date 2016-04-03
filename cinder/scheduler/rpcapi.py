@@ -22,7 +22,7 @@ from oslo_serialization import jsonutils
 
 from cinder.objects import base as objects_base
 from cinder import rpc
-
+from cinder.api.metricutil import ReportMetrics
 
 CONF = cfg.CONF
 
@@ -69,6 +69,7 @@ class SchedulerAPI(object):
                           request_spec_list=request_spec_p_list,
                           filter_properties_list=filter_properties_list)
 
+    #@ReportMetrics("scheduler-rpcapi-create-volume")
     def create_volume(self, ctxt, topic, volume_id, snapshot_id=None,
                       image_id=None, request_spec=None,
                       filter_properties=None):
