@@ -10,6 +10,10 @@ from time import time
 from oslo_context.context import RequestContext as context
 LOG = logging.getLogger(__name__)
 
+'''
+This decorator wraps around any method and captures latrncy around it. If the parameter 'report_error' is set to True
+then it also emits metrics on whether the method throws an exception or not
+'''
 class ReportMetrics(object):
     def __init__(self, metric_name, report_error = False):
         self.__metric_name = metric_name
@@ -21,8 +25,9 @@ class ReportMetrics(object):
             try:
                 return function(*args, **kwargs)
             except Exception as e:
-                LOG.exception('Exception in Report Metrics: %s', e)
+                LOG.error("Exception while executing " + function.__name__)
                 error = 1
+                raise e
             finally:
                 end_time = time()
                 try:
@@ -32,7 +37,7 @@ class ReportMetrics(object):
                     if self.__report_error == True:
                         metric_error = self.__metric_name + "_error"
                         metrics.add_count(metric_error, error)
-                except Exception as e:
+                except AttributeError as e:
                     LOG.exception("No threadlocal metrics object: %s", e)
 
         return metrics_wrapper
