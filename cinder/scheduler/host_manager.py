@@ -23,10 +23,11 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import timeutils
 
+from cinder.common.host_manager import get_active_volume_host
 from cinder import context as cinder_context
 from cinder import db
 from cinder import exception
-from cinder.i18n import _LI, _LW
+from cinder.i18n import _LI
 from cinder.openstack.common.scheduler import filters
 from cinder.openstack.common.scheduler import weights
 from cinder import utils
@@ -504,6 +505,13 @@ class HostManager(object):
             active_hosts.add(host)
 
         self._no_capabilities_hosts = no_capabilities_hosts
+
+        # FIXME(vivekd): we run cinder-volume in active passive mode.
+        # we'll consider the service with the latest 'updated_at' timestamp
+        # as the active node to arbitrate in cases where there could be two
+        # services up during a transient failover window.
+        # Once we move to true active-active mode, remove the below logic.
+        active_hosts = set([get_active_volume_host({k:self.host_state_map[k].service["updated_at"] for k in active_hosts})])
 
         # remove non-active hosts from host_state_map
         nonactive_hosts = set(self.host_state_map.keys()) - active_hosts

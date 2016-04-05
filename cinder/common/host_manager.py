@@ -16,8 +16,6 @@
 """Host State Manager."""
 
 
-import time
-
 from oslo_config import cfg
 from oslo_log import log as logging
 
@@ -25,32 +23,43 @@ from cinder.common.constants import CINDER_VOLUME
 from cinder import context
 from cinder import db
 from cinder import exception
+from cinder.i18n import _
 from cinder import utils
 
 
-CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
 
-def get_active_volume_host():
-    ctxt = context.get_admin_context()
-    volume_services = db.service_get_all_by_topic(ctxt,
-                                                  CINDER_VOLUME,
-                                                  disabled=False)
-    retry = 1
-    MAX_RETRIES = 3
-    while retry < MAX_RETRIES:
-        active_hosts = []
+def get_active_volume_host(active_hosts = {}):
+    if not active_hosts:
+        ctxt = context.get_admin_context()
+        volume_services = db.service_get_all_by_topic(ctxt,
+                                                      CINDER_VOLUME,
+                                                      disabled=False)
         for service in volume_services:
             if utils.service_is_up(service):
-                active_hosts.append(service['host'])
-        if len(active_hosts) != 1:
-            LOG.info("Active volume services count is not one;"
-                     "could be a failover window;"
-                     "so sleep for 60s and retry")
-            time.sleep(CONF.service_down_time)
-            retry += 1
-            continue
-        return active_hosts[0]
-    LOG.info("retry count exceeded MAX_RETRIES")
-    raise exception.ServiceNotFound(service_id=CINDER_VOLUME)
+                active_hosts[service['host']] = service['updated_at']
+    if not active_hosts:
+        raise exception.ServiceNotFound(service_id=CINDER_VOLUME)
+    elif len(active_hosts) == 1:
+        host = active_hosts.keys()[0]
+        LOG.info("Identified active volume host: %s" % host)
+        return host
+    elif len(active_hosts) == 2:
+        LOG.info("Active volume services count is not one;"
+                 "could be a failover window; so lets select the "
+                 "one with latest 'updated_at' timestamp")
+        host1, host2 = active_hosts.keys()
+        if active_hosts[host1] > active_hosts[host2]:
+            LOG.info("Identified active volume host(last updated): %s" % host1)
+            return host1
+        elif active_hosts[host2] > active_hosts[host1]:
+            LOG.info("Identified active volume host(last updated): %s" % host2)
+            return host2
+    # a rare undesirable case:
+    # there are two possibilities here.
+    # two active services had same updated_at timestamp OR
+    # more than two volume services are up.
+    # so lets fail fast.
+    LOG.error(_('Valid volume host couldnt be determined.'))
+    raise exception.NoValidHost(reason="no valid volume host")
