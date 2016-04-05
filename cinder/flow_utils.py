@@ -66,13 +66,14 @@ class CinderTask(task.Task):
     def __emit_metrics(self, start_time, end_time, metric_name_prefix):
         try:
             time_of_execution = int((end_time - start_time)*1000)
-            #metrics = ThreadLocalMetrics.get()
+            metrics = ThreadLocalMetrics.get()
             metric_time = metric_name_prefix+"-time"
             metric_occurence = metric_name_prefix+"-occurence"
-            #metrics.add_time(metric_time, time_of_execution, Unit.MILLIS)
-            #metrics.add_count(metric_occurence, 1)
-        except Exception:
+            metrics.add_time(metric_time, time_of_execution, Unit.MILLIS)
+            metrics.add_count(metric_occurence, 1)
+        except AttributeError:
             # Dont log metrics if its not there
+            LOG.error("Metric object not found in task flow")
             pass
 
 class DynamicLogListener(logging_listener.DynamicLoggingListener):
@@ -87,7 +88,7 @@ class DynamicLogListener(logging_listener.DynamicLoggingListener):
     #: Exception is an excepted case, don't include traceback in log if fails.
     _NO_TRACE_EXCEPTIONS = (exception.InvalidInput, exception.QuotaError)
 
-    def __init__(self, engine,
+    def __init__(self, engine,z
                  task_listen_for=base.DEFAULT_LISTEN_FOR,
                  flow_listen_for=base.DEFAULT_LISTEN_FOR,
                  retry_listen_for=base.DEFAULT_LISTEN_FOR,
