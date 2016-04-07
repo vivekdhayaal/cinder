@@ -15,6 +15,11 @@ This decorator wraps around any method and captures latrncy around it. If the pa
 then it also emits metrics on whether the method throws an exception or not
 '''
 class ReportMetrics(object):
+    '''
+    @:param metric_name This variable declares what is the latency of an afforsaid sub component call.
+    @:param report_error If this is set to True it adds an error counter to 1 if there is an error and 0 if there are no
+     error
+    '''
     def __init__(self, metric_name, report_error = False):
         self.__metric_name = metric_name
         self.__report_error = report_error
@@ -45,6 +50,10 @@ class ReportMetrics(object):
 # This creates a metrics wrapper for any method starting the method life cycle. It is recommended to put this at the
 # start of a request or async flow life cycle. This cane be used as decorator
 class MetricsWrapper(object):
+    '''
+    @program_name - This variable declares what sub component this is Cinder-API, cinder-volume etc
+    @operation_name - This is API or method name for the service. For example volume-create
+        '''
     def __init__(self, program_name,  operation_name):
         # Right now overriding service log path wont work
         self.__operation_name =  operation_name
@@ -78,38 +87,40 @@ class MetricsWrapper(object):
                 metrics.add_count("Success", success)
                 metrics.add_count("Fault", fault)
                 metrics.add_count("Error", error)
-                self._add_metric_attributes(metrics, *args, **kwargs)
+                self._add_request_attributes_to_metrics(metrics, *args, **kwargs)
                 metrics.close()
         return wrapped_function
 
-    def _add_metric_attributes(self, metrics, *args, **kwargs):
+    def _add_request_attributes_to_metrics(self, metrics, *args, **kwargs):
         pass
 
-# This class is used a as async metrics capture
+# This class is used a as async metrics capture for example cinder volume, scheduler , backup
 class CinderAsyncFlowMetricsWrapper(MetricsWrapper):
     def __init__(self,program_name,  operation_name):
-        super(CinderVolumeMetricsWrapper, self).__init__(program_name,
+        super(CinderAsyncFlowMetricsWrapper, self).__init__(program_name,
                                                           operation_name)
-    def _add_metric_attributes(self, metrics, *args, **kwargs):
+    def _add_request_attributes_to_metrics(self, metrics, *args, **kwargs):
         try:
             for arg in args:
                 if isinstance(arg, context):
-                    metrics.add_property(arg.request_id)
-                    metrics.add_property(arg.tenant)
+                    metrics.add_property("RequestId", arg.request_id)
+                    metrics.add_property("TenantId", arg.tenant)
                     break
         except Exception as e:
             LOG.exception('Exception in Gathering metrics: %s', e)
 
-
-class CinderVolumeMetricsWrapper(MetricsWrapper):
+# Wrapper for Cinder Volume
+class CinderVolumeMetricsWrapper(CinderAsyncFlowMetricsWrapper):
     def __init__(self, operation_name):
         super(CinderVolumeMetricsWrapper, self).__init__("CinderVolume", operation_name)
 
-class CinderBackupMetricsWrapper(MetricsWrapper):
+# Wrapper for Cinder Backup
+class CinderBackupMetricsWrapper(CinderAsyncFlowMetricsWrapper):
     def __init__(self,operation_name):
         super(CinderBackupMetricsWrapper, self).__init__("CinderBackup", operation_name)
 
-class CinderSchedulerMetricsWrapper(MetricsWrapper):
+# Wrapper for Cinder Scheduler
+class CinderSchedulerMetricsWrapper(CinderAsyncFlowMetricsWrapper):
     def __init__(self,operation_name):
         super(CinderSchedulerMetricsWrapper, self).__init__("CinderScheduler", operation_name)
 

@@ -72,9 +72,8 @@ class CinderTask(task.Task):
             metrics.add_time(metric_time, time_of_execution, Unit.MILLIS)
             metrics.add_count(metric_occurence, 1)
         except AttributeError:
-            # Dont log metrics if its not there
             LOG.error("Metric object not found in task flow")
-            pass
+
 
 class DynamicLogListener(logging_listener.DynamicLoggingListener):
     """This is used to attach to taskflow engines while they are running.
@@ -88,7 +87,7 @@ class DynamicLogListener(logging_listener.DynamicLoggingListener):
     #: Exception is an excepted case, don't include traceback in log if fails.
     _NO_TRACE_EXCEPTIONS = (exception.InvalidInput, exception.QuotaError)
 
-    def __init__(self, engine,z
+    def __init__(self, engine,
                  task_listen_for=base.DEFAULT_LISTEN_FOR,
                  flow_listen_for=base.DEFAULT_LISTEN_FOR,
                  retry_listen_for=base.DEFAULT_LISTEN_FOR,
