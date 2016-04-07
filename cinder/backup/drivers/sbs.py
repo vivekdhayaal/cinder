@@ -57,7 +57,6 @@ import cinder.volume.drivers.rbd as rbd_driver
 import datetime as dt
 from cinder.api.metricutil import ReportMetrics
 import datetime as dt
-from cinder.api.metricutil import ReportMetrics
 
 try:
     import rbd
@@ -646,7 +645,7 @@ class SBSBackupDriver(driver.BackupDriver):
                 raise exception.BackupOperationError(msg)
 
         #make sure snap is newer than base
-        now = dt.datetime.now()
+        now = timeutils.utcnow()
         self.db.backup_update(self.context, backup_id,
 			      {'created_at': now})
         self.db.backup_update(self.context, backup_id,
