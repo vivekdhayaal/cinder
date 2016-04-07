@@ -645,7 +645,7 @@ class SBSBackupDriver(driver.BackupDriver):
                 raise exception.BackupOperationError(msg)
 
         #make sure snap is newer than base
-        now = timeutils.utcnow()
+        now = dt.datetime.now()
         self.db.backup_update(self.context, backup_id,
 			      {'created_at': now})
         self.db.backup_update(self.context, backup_id,
