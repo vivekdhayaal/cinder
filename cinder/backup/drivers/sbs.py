@@ -54,6 +54,7 @@ from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder import utils
 import cinder.volume.drivers.rbd as rbd_driver
+import datetime as dt
 
 try:
     import rbd
@@ -636,7 +637,7 @@ class SBSBackupDriver(driver.BackupDriver):
                 raise exception.BackupOperationError(msg)
 
         #make sure snap is newer than base
-        now = timeutils.utcnow()
+        now = dt.datetime.now()
         self.db.backup_update(self.context, backup_id,
 			      {'created_at': now})
         self.db.backup_update(self.context, backup_id,
