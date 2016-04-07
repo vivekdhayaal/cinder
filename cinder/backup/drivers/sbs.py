@@ -56,6 +56,8 @@ from cinder import utils
 import cinder.volume.drivers.rbd as rbd_driver
 import datetime as dt
 from cinder.api.metricutil import ReportMetrics
+import datetime as dt
+from cinder.api.metricutil import ReportMetrics
 
 try:
     import rbd

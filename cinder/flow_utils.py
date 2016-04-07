@@ -74,7 +74,6 @@ class CinderTask(task.Task):
         except AttributeError:
             LOG.error("Metric object not found in task flow")
 
-
 class DynamicLogListener(logging_listener.DynamicLoggingListener):
     """This is used to attach to taskflow engines while they are running.
 
