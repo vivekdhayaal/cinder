@@ -184,22 +184,23 @@ class API(base.Base):
         # Find the latest backup of the volume and use it as the parent
         # backup to do an incremental backup.
         latest_backup = None
-        if incremental:
-            backups = self.db.backup_get_all_by_volume(context.elevated(),
-                                                       volume_id)
-            if backups:
-                latest_backup = max(backups, key=lambda x: x['created_at'])
-            else:
-                msg = _('No backups available to do an incremental backup.')
-                raise exception.InvalidBackup(reason=msg)
-
         parent_id = None
-        if latest_backup:
+        backups = self.db.backup_get_all_by_volume(context.elevated(),
+                                                   volume_id)
+        if backups:
+            msg = None
+            latest_backup = max(backups, key=lambda x: x['created_at'])
             parent_id = latest_backup['id']
-            if latest_backup['status'] != "available":
-                msg = _('The parent backup must be available for '
-                        'incremental backup.')
-                raise exception.InvalidBackup(reason=msg)
+            if (latest_backup['status'] == "error"):
+                msg = _('Previous snapshot of the volume is in error status.'
+                        ' Delete it before creating new snapshot.')
+            elif (latest_backup['status'] == "creating"):
+                msg = _('Previous snapshot of the volume is in creating status.')
+            elif (latest_backup['status'] == "deleting"):
+                msg = _('Previous snapshot of the volume is in deleting status.')
+
+            if msg is not None:
+                raise exception.BackupOperationError(reason=msg)
 
         orig_status = volume['status']
         new_status = 'backing-up-' + orig_status
