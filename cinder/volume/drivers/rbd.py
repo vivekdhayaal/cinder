@@ -92,6 +92,7 @@ if not os.environ.get('EVENTLET_THREADPOOL_SIZE'):
     os.environ['EVENTLET_THREADPOOL_SIZE'] = str(CONF.rbd_tpool_size)
 
 from eventlet import tpool
+from eventlet import dpool
 
 class RBDImageMetadata(object):
     """RBD image metadata to be used with RBDImageIOWrapper."""
@@ -296,6 +297,9 @@ class RBDDriver(driver.VolumeDriver):
 
     def RBDProxy(self):
         return tpool.Proxy(self.rbd.RBD())
+
+    def RBDDELProxy(self):
+        return dpool.Proxy(self.rbd.RBD())
 
     def _ceph_args(self):
         args = []
@@ -644,7 +648,7 @@ class RBDDriver(driver.VolumeDriver):
         # keep walking up the chain if it is itself a clone.
         if (not parent_has_snaps) and parent_name.endswith('.deleted'):
             LOG.debug("deleting parent %s" % (parent_name))
-            self.RBDProxy().remove(client.ioctx, parent_name)
+            self.RBDDELProxy().remove(client.ioctx, parent_name)
 
             # Now move up to grandparent if there is one
             if g_parent:
@@ -692,7 +696,7 @@ class RBDDriver(driver.VolumeDriver):
             if clone_snap is None:
                 LOG.debug("deleting rbd volume %s" % (volume_name))
                 try:
-                    self.RBDProxy().remove(client.ioctx, volume_name)
+                    self.RBDDELProxy().remove(client.ioctx, volume_name)
                 except self.rbd.ImageBusy:
                     msg = (_("ImageBusy error raised while deleting rbd "
                              "volume. This may have been caused by a "
