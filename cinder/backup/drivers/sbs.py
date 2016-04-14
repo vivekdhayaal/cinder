@@ -412,7 +412,7 @@ class SBSBackupDriver(driver.BackupDriver):
 
     #currently broken, not used
     @ReportMetrics("dss-multi-part-upload", report_error = True)
-    def _multi_part_upload(self, bucket, key, loc):
+    def _multi_part_upload(self, bucket, key, loc, backup_id):
         size = os.stat(loc).st_size
         mp = bucket.initiate_multipart_upload(key)
         chunk_size = self._chunk_size
@@ -425,9 +425,16 @@ class SBSBackupDriver(driver.BackupDriver):
                 mp.upload_part_from_file(fp,part_num=i+1)
 
         mp.complete_upload()
+        msg = (_('Snapshot %(snap)s Uploaded size:%(size)d' %
+                { 'snap': key, 'size': size}))
+        LOG.info(msg)
+
+        self.db.backup_update(self.context, backup_id,
+                              {'actual_size': size})
 
     @ReportMetrics("dss-upload", report_error = True)
-    def _upload_to_DSS(self, snap_name, volume_name, ceph_args, from_snap=None):
+    def _upload_to_DSS(self, snap_name, volume_name, ceph_args, backup_id,
+                       from_snap=None):
         tmp_cmd = ['mkdir', '-p', '/tmp/uploads']
         self._execute(*tmp_cmd, run_as_root=False)
         cmd = ['rbd', 'export-diff'] + ceph_args
@@ -456,7 +463,7 @@ class SBSBackupDriver(driver.BackupDriver):
             raise exception.BackupOperationError(msg)
             return
         try:
-            self._multi_part_upload(bucket, key, loc)
+            self._multi_part_upload(bucket, key, loc, backup_id)
             #key.set_contents_from_filename(loc)
         except exception as e:
             os.remove(loc)
@@ -625,9 +632,11 @@ class SBSBackupDriver(driver.BackupDriver):
                      'base': base_name})
 
         if upload_base == True:
-                self._upload_to_DSS(base_name, volume_name, ceph_args)
+                self._upload_to_DSS(base_name, volume_name, ceph_args,
+                                    base_id)
         # export diff now
-        self._upload_to_DSS(new_snap, volume_name, ceph_args, from_snap)
+        self._upload_to_DSS(new_snap, volume_name, ceph_args, backup_id,
+                            from_snap)
 
         #if from_snap is same as base, then parent is base
         if from_snap == base_name:
@@ -643,17 +652,16 @@ class SBSBackupDriver(driver.BackupDriver):
                 LOG.err(msg)
                 raise exception.BackupOperationError(msg)
 
-        #make sure snap is newer than base
-        now = dt.datetime.now()
-        self.db.backup_update(self.context, backup_id,
-			      {'created_at': now})
-        self.db.backup_update(self.context, backup_id,
-			      {'time_stamp': time_stamp})
-
-        self.db.backup_update(self.context, backup_id,
-                              {'parent_id': par_id})
-        self.db.backup_update(self.context, backup_id,
-                              {'container': self._container})
+        #make sure the 1st snap is newer than base, as we created base after api
+        if upload_base == True:
+            now = dt.datetime.now()
+            self.db.backup_update(self.context, backup_id,
+                                    {'created_at': now, 'time_stamp': time_stamp,
+                                     'parent_id': par_id, 'container': self._container})
+        else:
+            self.db.backup_update(self.context, backup_id,
+                                    {'time_stamp': time_stamp,
+                                    'parent_id': par_id, 'container': self._container})
 
         # Remove older from-snap from src, as new snap will be "New" from-snap
         # Do this is from-snap is not same as base snap, as it will be the first
@@ -671,9 +679,8 @@ class SBSBackupDriver(driver.BackupDriver):
         LOG.debug("Starting backup of volume='%s'.", volume_id)
 
         self.db.backup_update(self.context, backup_id,
-                              {'container': self._container})
-        self.db.backup_update(self.context, backup_id,
-                              {'version':self.DRIVER_VERSION})
+                              {'container': self._container,
+                               'version':self.DRIVER_VERSION})
 
         # Ensure we are at the beginning of the volume
         volume_file.seek(0)
@@ -700,7 +707,7 @@ class SBSBackupDriver(driver.BackupDriver):
         backup_tree.reverse()
         return backup_tree
 
-    def _download_from_DSS(self, snap_name, volume_name, ceph_args, container):
+    def _download_from_DSS(self, snap_name, volume_name, ceph_args, container, backup):
         tmp_cmd = ['mkdir', '-p', '/tmp/downloads']
         self._execute(*tmp_cmd, run_as_root=False)
         loc = encodeutils.safe_encode("/tmp/downloads/%s" % (snap_name))
@@ -725,6 +732,25 @@ class SBSBackupDriver(driver.BackupDriver):
             LOG.error(errmsg)
             raise exception.InvalidBackup(reason=errmsg)
             return
+
+        actual_size = backup['actual_size']
+
+        if (actual_size != None):
+            downloaded_size = os.stat(loc).st_size
+            if (actual_size != downloaded_size):
+                errmsg = (_('Size mismatch in snapshots. Expected:%(actual)d,'
+                            ' downloaded:%(downloaded)d' %
+                           {'actual': actual_size, 'downloaded': downloaded_size}))
+                LOG.error(errmsg)
+                raise exception.InvalidBackup(reason=errmsg)
+                return
+            else:
+                msg = (_('Snapshot %(snap)s Uploaded size:%(actual)d, '
+                         ' downloaded size:%(download)d' %
+                         { 'snap':snap_name, 'actual': actual_size,
+                           'download': downloaded_size}))
+                LOG.info(msg)
+
         cmd = ['rbd', 'import-diff'] + ceph_args
         #if from_snap is None, do full upload
         volume_name = encodeutils.safe_encode("%s" % (volume_name))
@@ -754,7 +780,7 @@ class SBSBackupDriver(driver.BackupDriver):
             return False
 
         self._download_from_DSS(backup_name, volume_name, ceph_args,
-                                backup['container']) 
+                                backup['container'], backup)
         return
 
     """
