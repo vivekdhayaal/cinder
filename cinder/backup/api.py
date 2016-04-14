@@ -35,6 +35,7 @@ from cinder import quota
 from cinder import utils
 import cinder.volume
 from cinder.volume import utils as volume_utils
+from cinder.api.metricutil import ReportMetrics
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class API(base.Base):
         rv = self.db.backup_get(context, backup_id)
         return dict(rv.iteritems())
 
+    @ReportMetrics("backup-api-delete")
     def delete(self, context, backup_id):
         """Make the RPC call to delete a volume backup."""
         check_policy(context, 'delete')
@@ -83,6 +85,7 @@ class API(base.Base):
                                          backup['host'],
                                          backup['id'])
 
+    @ReportMetrics("backup-api-getall")
     def get_all(self, context, search_opts=None):
         if search_opts is None:
             search_opts = {}
@@ -128,6 +131,7 @@ class API(base.Base):
             msg = _('Volume status is in-use.')
             raise exception.InvalidVolume(reason=msg)
 
+    @ReportMetrics("backup-api-create")
     def create(self, context, name, description, volume_id,
                container, force, incremental=False, availability_zone=None):
         """Make the RPC call to create a volume backup."""
@@ -236,6 +240,7 @@ class API(base.Base):
 
         return backup
 
+    @ReportMetrics("backup-api-restore")
     def restore(self, context, backup_id, volume_id=None, volume_size=None,name=None,description=None):
         """Make the RPC call to restore a volume backup."""
         check_policy(context, 'restore')

@@ -23,7 +23,7 @@ from oslo_serialization import jsonutils
 from cinder.objects import base as objects_base
 from cinder import rpc
 from cinder.volume import utils
-
+from cinder.api.metricutil import ReportMetrics
 
 CONF = cfg.CONF
 
@@ -119,6 +119,7 @@ class VolumeAPI(object):
         cctxt.cast(ctxt, 'delete_cgsnapshot',
                    cgsnapshot_id=cgsnapshot['id'])
 
+    @ReportMetrics("volume-rpcapi-create-volume")
     def create_volume(self, ctxt, volume, host,
                       request_spec, filter_properties,
                       allow_reschedule=True,
@@ -142,6 +143,7 @@ class VolumeAPI(object):
                    consistencygroup_id=consistencygroup_id,
                    cgsnapshot_id=cgsnapshot_id)
 
+    @ReportMetrics("volume-rpcapi-delete-volume")
     def delete_volume(self, ctxt, volume, unmanage_only=False):
         cctxt = self._get_cctxt(volume['host'], '1.15')
         cctxt.cast(ctxt, 'delete_volume',
@@ -157,6 +159,7 @@ class VolumeAPI(object):
         cctxt = self._get_cctxt(host)
         cctxt.cast(ctxt, 'delete_snapshot', snapshot=snapshot)
 
+    @ReportMetrics("volume-rpcapi-attach-volume")
     def attach_volume(self, ctxt, volume, instance_uuid, host_name,
                       mountpoint, mode):
 
@@ -168,6 +171,7 @@ class VolumeAPI(object):
                           mountpoint=mountpoint,
                           mode=mode)
 
+    @ReportMetrics("volume-rpcapi-detach-volume")
     def detach_volume(self, ctxt, volume, attachment_id):
         cctxt = self._get_cctxt(volume['host'], '1.20')
         return cctxt.call(ctxt, 'detach_volume', volume_id=volume['id'],
@@ -178,12 +182,14 @@ class VolumeAPI(object):
         cctxt.cast(ctxt, 'copy_volume_to_image', volume_id=volume['id'],
                    image_meta=image_meta)
 
+    @ReportMetrics("volume-rpcapi-initialize-connection")
     def initialize_connection(self, ctxt, volume, connector):
         cctxt = self._get_cctxt(volume['host'])
         return cctxt.call(ctxt, 'initialize_connection',
                           volume_id=volume['id'],
                           connector=connector)
 
+    @ReportMetrics("volume-rpcapi-terminate-connection")
     def terminate_connection(self, ctxt, volume, connector, force=False):
         cctxt = self._get_cctxt(volume['host'])
         return cctxt.call(ctxt, 'terminate_connection', volume_id=volume['id'],

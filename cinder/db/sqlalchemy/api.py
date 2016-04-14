@@ -50,7 +50,7 @@ from cinder.common import sqlalchemyutils
 from cinder.db.sqlalchemy import models
 from cinder import exception
 from cinder.i18n import _, _LW, _LE, _LI
-
+from cinder.api.metricutil import ReportMetrics
 
 CONF = cfg.CONF
 CONF.import_group("profiler", "cinder.service")
@@ -981,6 +981,7 @@ def reservation_expire(context):
 ###################
 
 
+@ReportMetrics("mysql-db-volume-attach")
 @require_admin_context
 def volume_attach(context, values):
     volume_attachment_ref = models.VolumeAttachment()
@@ -995,6 +996,7 @@ def volume_attach(context, values):
                                      session=session)
 
 
+@ReportMetrics("mysql-db-volume-attached")
 @require_admin_context
 def volume_attached(context, attachment_id, instance_uuid, host_name,
                     mountpoint, attach_mode='rw'):
@@ -1030,6 +1032,7 @@ def volume_attached(context, attachment_id, instance_uuid, host_name,
         return volume_ref
 
 
+@ReportMetrics("mysql-db-volume-create")
 @require_context
 def volume_create(context, values):
     values['volume_metadata'] = _metadata_refs(values.get('metadata'),
@@ -1141,6 +1144,7 @@ def finish_volume_migration(context, src_vol_id, dest_vol_id):
             setattr(src_volume_ref, key, value)
 
 
+@ReportMetrics("mysql-db-volume-destroy")
 @require_admin_context
 @_retry_on_deadlock
 def volume_destroy(context, volume_id):
@@ -1173,6 +1177,7 @@ def volume_destroy(context, volume_id):
                     'updated_at': literal_column('updated_at')})
 
 
+@ReportMetrics("mysql-db-volume-detach")
 @require_admin_context
 def volume_detach(context, attachment_id):
     session = get_session()
@@ -1183,6 +1188,7 @@ def volume_detach(context, attachment_id):
         volume_attachment_ref.save(session=session)
 
 
+@ReportMetrics("mysql-db-volume-detached")
 @require_admin_context
 def volume_detached(context, volume_id, attachment_id):
     """This updates a volume attachment and marks it as detached.
@@ -1254,6 +1260,7 @@ def _volume_get_query(context, session=None, project_only=False):
             options(joinedload('consistencygroup'))
 
 
+@ReportMetrics("mysql-db-volume-get")
 @require_context
 def _volume_get(context, volume_id, session=None):
     result = _volume_get_query(context, session=session, project_only=True).\
@@ -1277,6 +1284,7 @@ def _volume_get_by_name(context, volume_name, session=None):
     return result
 
 
+@ReportMetrics("mysql-db-volume-attachment-get")
 @require_context
 def volume_attachment_get(context, attachment_id, session=None):
     result = model_query(context, models.VolumeAttachment,
@@ -1289,6 +1297,7 @@ def volume_attachment_get(context, attachment_id, session=None):
     return result
 
 
+@ReportMetrics("mysql-db-volume-attachment-get-volumeid")
 @require_context
 def volume_attachment_get_used_by_volume_id(context, volume_id, session=None):
     result = model_query(context, models.VolumeAttachment,
@@ -1325,6 +1334,7 @@ def volume_attachment_get_by_instance_uuid(context, volume_id, instance_uuid):
         return result
 
 
+@ReportMetrics("mysql-db-volume-get")
 @require_context
 def volume_get(context, volume_id):
     return _volume_get(context, volume_id)
@@ -1334,6 +1344,7 @@ def volume_get_by_name(context,volume_name):
     return _volume_get_by_name(context, volume_name)
 
 
+@ReportMetrics("mysql-db-volume-getall-admin")
 @require_admin_context
 def volume_get_all(context, marker, limit, sort_keys=None, sort_dirs=None,
                    filters=None):
@@ -1424,6 +1435,7 @@ def volume_get_all_by_group(context, group_id, filters=None):
     return query.all()
 
 
+@ReportMetrics("mysql-db-volume-getall-user")
 @require_context
 def volume_get_all_by_project(context, project_id, marker, limit,
                               sort_keys=None, sort_dirs=None, filters=None):
@@ -3196,6 +3208,7 @@ def _backup_get_all(context, filters=None):
         return query.all()
 
 
+@ReportMetrics("mysql-db-backup-getall-admin")
 @require_admin_context
 def backup_get_all(context, filters=None):
     return _backup_get_all(context, filters)
@@ -3206,6 +3219,7 @@ def backup_get_all_by_host(context, host):
     return model_query(context, models.Backup).filter_by(host=host).all()
 
 
+@ReportMetrics("mysql-db-backup-getall-user")
 @require_context
 def backup_get_all_by_project(context, project_id, filters=None):
 
@@ -3220,6 +3234,7 @@ def backup_get_all_by_project(context, project_id, filters=None):
     return _backup_get_all(context, filters)
 
 
+@ReportMetrics("mysql-db-backup-getall-volume")
 @require_context
 def backup_get_all_by_volume(context, volume_id, filters=None):
 
@@ -3234,6 +3249,7 @@ def backup_get_all_by_volume(context, volume_id, filters=None):
     return _backup_get_all(context, filters)
 
 
+@ReportMetrics("mysql-db-backup-create")
 @require_context
 def backup_create(context, values):
     backup = models.Backup()
@@ -3247,6 +3263,7 @@ def backup_create(context, values):
         return backup
 
 
+@ReportMetrics("mysql-db-backup-update")
 @require_context
 def backup_update(context, backup_id, values):
     session = get_session()
@@ -3264,6 +3281,7 @@ def backup_update(context, backup_id, values):
     return backup
 
 
+@ReportMetrics("mysql-db-backup-destroy")
 @require_admin_context
 def backup_destroy(context, backup_id):
     model_query(context, models.Backup).\

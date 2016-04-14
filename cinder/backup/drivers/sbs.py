@@ -55,6 +55,7 @@ from cinder.i18n import _, _LE, _LI, _LW
 from cinder import utils
 import cinder.volume.drivers.rbd as rbd_driver
 import datetime as dt
+from cinder.api.metricutil import ReportMetrics
 
 try:
     import rbd
@@ -114,6 +115,7 @@ class SBSBackupDriver(driver.BackupDriver):
         self._chunk_size = CONF.sbs_upload_chunk_size
 
     #Routine used to connect to ceph cluster called by rbd_driver.RADOSClient
+    @ReportMetrics("rados-connect", report_error = True)
     def _connect_to_rados(self, pool=None):
         """Establish connection to the backup Ceph cluster."""
         client = self.rados.Rados(rados_id=self._ceph_backup_user,
@@ -131,6 +133,7 @@ class SBSBackupDriver(driver.BackupDriver):
             raise exception.InvalidBackup(reason=errmsg)
 
     #Routine use to disconnect from ceph cluster
+    @ReportMetrics("rados-discconnect", report_error = True)
     def _disconnect_from_rados(self, client, ioctx):
         """Terminate connection with the backup Ceph cluster."""
         # closing an ioctx cannot raise an exception
@@ -379,6 +382,7 @@ class SBSBackupDriver(driver.BackupDriver):
         return True
 
     #connect to object store and return handle
+    @ReportMetrics("dss-connection", report_error = True)
     def _connect_to_DSS(self):
         try:
             LOG.info("Connecting to dss @ %s" % self._dss_host)
@@ -393,6 +397,7 @@ class SBSBackupDriver(driver.BackupDriver):
         return conn
 
     #return handle to the bucket
+    @ReportMetrics("dss-get-bucket", report_error = True)
     def _get_bucket(self, conn, bucket_name):
         backup_bucket = None
         if (conn != None) and (bucket_name != None):
@@ -406,6 +411,7 @@ class SBSBackupDriver(driver.BackupDriver):
         return backup_bucket
 
     #currently broken, not used
+    @ReportMetrics("dss-multi-part-upload", report_error = True)
     def _multi_part_upload(self, bucket, key, loc):
         size = os.stat(loc).st_size
         mp = bucket.initiate_multipart_upload(key)
@@ -420,6 +426,7 @@ class SBSBackupDriver(driver.BackupDriver):
 
         mp.complete_upload()
 
+    @ReportMetrics("dss-upload", report_error = True)
     def _upload_to_DSS(self, snap_name, volume_name, ceph_args, from_snap=None):
         tmp_cmd = ['mkdir', '-p', '/tmp/uploads']
         self._execute(*tmp_cmd, run_as_root=False)
@@ -815,6 +822,7 @@ class SBSBackupDriver(driver.BackupDriver):
 
         return
 
+    @ReportMetrics("dss-remove", report_error = True)
     def _remove_from_DSS(self, backup):
         snap_name = self._get_rbd_image_name(backup)
         LOG.info("Deleting backups %s from container %s" % (snap_name, backup['container']))

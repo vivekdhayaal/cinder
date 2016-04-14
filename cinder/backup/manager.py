@@ -50,6 +50,7 @@ from cinder import quota
 from cinder import rpc
 from cinder import utils
 from cinder.volume import utils as volume_utils
+from cinder.api.metricutil import CinderBackupMetricsWrapper
 
 LOG = logging.getLogger(__name__)
 
@@ -240,6 +241,7 @@ class BackupManager(manager.SchedulerDependentManager):
                 LOG.info(_LI('Resuming delete on backup: %s.'), backup['id'])
                 self.delete_backup(ctxt, backup['id'])
 
+    @CinderBackupMetricsWrapper(operation_name="cinder-backup-create")
     def create_backup(self, context, backup_id, orig_status='available'):
         """Create volume backups using configured backup service."""
         backup = self.db.backup_get(context, backup_id)
@@ -308,6 +310,7 @@ class BackupManager(manager.SchedulerDependentManager):
         LOG.info(_LI('Create backup finished. backup: %s.'), backup_id)
         self._notify_about_backup_usage(context, backup, "create.end")
 
+    @CinderBackupMetricsWrapper(operation_name="cinder-backup-restore")
     def restore_backup(self, context, backup_id, volume_id):
         """Restore volume backups from configured backup service."""
         LOG.info(_LI('Restore backup started, backup: %(backup_id)s '
@@ -393,6 +396,7 @@ class BackupManager(manager.SchedulerDependentManager):
                  {'backup_id': backup_id, 'volume_id': volume_id})
         self._notify_about_backup_usage(context, backup, "restore.end")
 
+    @CinderBackupMetricsWrapper(operation_name="cinder-backup-delete")
     def delete_backup(self, context, backup_id):
         """Delete volume backup from configured backup service."""
         try:
