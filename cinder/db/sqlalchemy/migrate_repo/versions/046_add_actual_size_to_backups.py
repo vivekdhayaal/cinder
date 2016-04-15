@@ -15,7 +15,7 @@
 # Copyright (c) 2016 Shishir Gowda <shishir.gowda@ril.com>
 
 from oslo_log import log as logging
-from sqlalchemy import Column, MetaData, Table, Float
+from sqlalchemy import Column, MetaData, Table, Float, Integer
 
 from cinder.i18n import _LE
 
