@@ -53,6 +53,7 @@ from taskflow import exceptions as tfe
 
 from cinder import compute
 from cinder import context
+from cinder import coordination
 from cinder import exception
 from cinder import flow_utils
 from cinder.i18n import _, _LE, _LI, _LW
@@ -470,7 +471,8 @@ class VolumeManager(manager.SchedulerDependentManager):
             if locked_action is None:
                 _run_flow()
             else:
-                _run_flow_locked()
+                with coordination.Lock(locked_action):
+                    _run_flow()
         except Exception as e:
             if hasattr(e, 'rescheduled'):
                 rescheduled = e.rescheduled
@@ -490,7 +492,7 @@ class VolumeManager(manager.SchedulerDependentManager):
         return vol_ref['id']
 
     @CinderVolumeMetricsWrapper(operation_name="cinder-volume-delete")
-    @locked_volume_operation
+    @coordination.synchronized('{volume_id}-{f_name}')
     def delete_volume(self, context, volume_id, unmanage_only=False):
         """Deletes and unexports volume.
 
@@ -690,7 +692,7 @@ class VolumeManager(manager.SchedulerDependentManager):
         self._notify_about_snapshot_usage(context, snapshot, "create.end")
         return snapshot.id
 
-    @locked_snapshot_operation
+    @coordination.synchronized('{snapshot.id}-{f_name}')
     def delete_snapshot(self, context, snapshot):
         """Deletes and unexports snapshot."""
         context = context.elevated()
@@ -755,99 +757,97 @@ class VolumeManager(manager.SchedulerDependentManager):
         return True
 
     @CinderVolumeMetricsWrapper(operation_name="cinder-volume-attach")
+    @coordination.synchronized('{volume_id}')
     def attach_volume(self, context, volume_id, instance_uuid, host_name,
                       mountpoint, mode):
         """Updates db to show volume is attached."""
-        @utils.synchronized(volume_id, external=True)
-        def do_attach():
-            # check the volume status before attaching
-            volume = self.db.volume_get(context, volume_id)
-            volume_metadata = self.db.volume_admin_metadata_get(
-                context.elevated(), volume_id)
-            if volume['status'] == 'attaching':
-                if (volume_metadata.get('attached_mode') and
-                    volume_metadata.get('attached_mode') != mode):
-                    msg = _("being attached by different mode")
-                    raise exception.InvalidVolume(reason=msg)
-
-            if (volume['status'] == 'in-use' and not volume['multiattach']
-               and not volume['migration_status']):
-                msg = _("volume is already attached")
+        # check the volume status before attaching
+        volume = self.db.volume_get(context, volume_id)
+        volume_metadata = self.db.volume_admin_metadata_get(
+            context.elevated(), volume_id)
+        if volume['status'] == 'attaching':
+            if (volume_metadata.get('attached_mode') and
+                volume_metadata.get('attached_mode') != mode):
+                msg = _("being attached by different mode")
                 raise exception.InvalidVolume(reason=msg)
 
-            attachment = None
-            host_name_sanitized = utils.sanitize_hostname(
-                host_name) if host_name else None
-            if instance_uuid:
-                attachment = \
-                    self.db.volume_attachment_get_by_instance_uuid(
-                        context, volume_id, instance_uuid)
-            else:
-                attachment = \
-                    self.db.volume_attachment_get_by_host(context, volume_id,
-                                                          host_name_sanitized)
-            if attachment is not None:
-                self.db.volume_update(context, volume_id,
-                                      {'status': 'in-use'})
-                return
+        if (volume['status'] == 'in-use' and not volume['multiattach']
+           and not volume['migration_status']):
+            msg = _("volume is already attached")
+            raise exception.InvalidVolume(reason=msg)
 
-            self._notify_about_volume_usage(context, volume,
-                                            "attach.start")
-            values = {'volume_id': volume_id,
-                      'attach_status': 'attaching', }
+        attachment = None
+        host_name_sanitized = utils.sanitize_hostname(
+            host_name) if host_name else None
+        if instance_uuid:
+            attachment = \
+                self.db.volume_attachment_get_by_instance_uuid(
+                    context, volume_id, instance_uuid)
+        else:
+            attachment = \
+                self.db.volume_attachment_get_by_host(context, volume_id,
+                                                      host_name_sanitized)
+        if attachment is not None:
+            self.db.volume_update(context, volume_id,
+                                  {'status': 'in-use'})
+            return
 
-            attachment = self.db.volume_attach(context.elevated(), values)
-            volume_metadata = self.db.volume_admin_metadata_update(
-                context.elevated(), volume_id,
-                {"attached_mode": mode}, False)
+        self._notify_about_volume_usage(context, volume,
+                                        "attach.start")
+        values = {'volume_id': volume_id,
+                  'attach_status': 'attaching', }
 
-            attachment_id = attachment['id']
-            if instance_uuid and not uuidutils.is_uuid_like(instance_uuid):
-                self.db.volume_attachment_update(context, attachment_id,
-                                                 {'attach_status':
-                                                  'error_attaching'})
-                raise exception.InvalidUUID(uuid=instance_uuid)
+        attachment = self.db.volume_attach(context.elevated(), values)
+        volume_metadata = self.db.volume_admin_metadata_update(
+            context.elevated(), volume_id,
+            {"attached_mode": mode}, False)
 
-            volume = self.db.volume_get(context, volume_id)
+        attachment_id = attachment['id']
+        if instance_uuid and not uuidutils.is_uuid_like(instance_uuid):
+            self.db.volume_attachment_update(context, attachment_id,
+                                             {'attach_status':
+                                              'error_attaching'})
+            raise exception.InvalidUUID(uuid=instance_uuid)
 
-            if volume_metadata.get('readonly') == 'True' and mode != 'ro':
-                self.db.volume_update(context, volume_id,
-                                      {'status': 'error_attaching'})
-                raise exception.InvalidVolumeAttachMode(mode=mode,
-                                                        volume_id=volume_id)
+        volume = self.db.volume_get(context, volume_id)
 
-            try:
-                # NOTE(flaper87): Verify the driver is enabled
-                # before going forward. The exception will be caught
-                # and the volume status updated.
-                utils.require_driver_initialized(self.driver)
+        if volume_metadata.get('readonly') == 'True' and mode != 'ro':
+            self.db.volume_update(context, volume_id,
+                                  {'status': 'error_attaching'})
+            raise exception.InvalidVolumeAttachMode(mode=mode,
+                                                    volume_id=volume_id)
 
-                self.driver.attach_volume(context,
-                                          volume,
-                                          instance_uuid,
-                                          host_name_sanitized,
-                                          mountpoint)
-            except Exception:
-                with excutils.save_and_reraise_exception():
-                    self.db.volume_attachment_update(
-                        context, attachment_id,
-                        {'attach_status': 'error_attaching'})
+        try:
+            # NOTE(flaper87): Verify the driver is enabled
+            # before going forward. The exception will be caught
+            # and the volume status updated.
+            utils.require_driver_initialized(self.driver)
 
-            volume = self.db.volume_attached(context.elevated(),
-                                             attachment_id,
-                                             instance_uuid,
-                                             host_name_sanitized,
-                                             mountpoint,
-                                             mode)
-            if volume['migration_status']:
-                self.db.volume_update(context, volume_id,
-                                      {'migration_status': None})
-            self._notify_about_volume_usage(context, volume, "attach.end")
-            return self.db.volume_attachment_get(context, attachment_id)
-        return do_attach()
+            self.driver.attach_volume(context,
+                                      volume,
+                                      instance_uuid,
+                                      host_name_sanitized,
+                                      mountpoint)
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                self.db.volume_attachment_update(
+                    context, attachment_id,
+                    {'attach_status': 'error_attaching'})
+
+        volume = self.db.volume_attached(context.elevated(),
+                                         attachment_id,
+                                         instance_uuid,
+                                         host_name_sanitized,
+                                         mountpoint,
+                                         mode)
+        if volume['migration_status']:
+            self.db.volume_update(context, volume_id,
+                                  {'migration_status': None})
+        self._notify_about_volume_usage(context, volume, "attach.end")
+        return self.db.volume_attachment_get(context, attachment_id)
 
     @CinderVolumeMetricsWrapper(operation_name="cinder-volume-detach")
-    @locked_detach_operation
+    @coordination.synchronized('{volume_id}-{f_name}')
     def detach_volume(self, context, volume_id, attachment_id=None):
         """Updates db to show volume is detached."""
         # TODO(vish): refactor this into a more general "unreserve"
