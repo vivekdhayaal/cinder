@@ -81,8 +81,11 @@ def main():
             # Dispose of the whole DB connection pool here before
             # starting another process.  Otherwise we run into cases where
             # child processes share DB connections which results in errors.
+            value =1
+            if CONF.osapi_volume_workers:
+               value=CONF.osapi_volume_workers
             session.dispose_engine()
-            launcher.launch_service(server)
+            launcher.launch_service(server,value)
     else:
         server = service.Service.create(binary='cinder-volume')
         launcher.launch_service(server)
