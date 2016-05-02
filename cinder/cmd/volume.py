@@ -83,7 +83,7 @@ def main():
             # child processes share DB connections which results in errors.
             value =1
             if CONF.osapi_volume_workers:
-               value=CONF.osapi_volume_workers        
+               value=CONF.osapi_volume_workers
             session.dispose_engine()
             launcher.launch_service(server,value)
     else:
