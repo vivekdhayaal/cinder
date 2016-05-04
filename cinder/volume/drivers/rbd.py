@@ -313,6 +313,13 @@ class RBDDriver(driver.VolumeDriver):
         LOG.debug("opening connection to ceph cluster (timeout=%s)." %
                   (self.configuration.rados_connect_timeout))
 
+        # NOTE: comment from https://review.openstack.org/#/c/197710 -
+        # According to Python documentation, code can lead to a deadlock if
+        # the spawned thread directly or indirectly attempts to import a
+        # module. python-rados spawns new thread to connect to cluster. So
+        # I removed spawning of new thread to connect to rados. All
+        # long-running operations calls with python-rbd are still
+        # implemented in native Python threads to block eventlet loop.
         client = self.rados.Rados(
             rados_id=self.configuration.rbd_user,
             conffile=self.configuration.rbd_ceph_conf)
